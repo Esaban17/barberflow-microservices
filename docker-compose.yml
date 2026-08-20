@@ -37,6 +37,11 @@ networks:
 services:
   # Service registry. `-dev` mantiene el estado en memoria: suficiente para la
   # demo del curso y evita tener que versionar un volumen.
+  #
+  # OJO con el TTL de desregistro: el PDF dice 30s y es falso. Cronometrado desde
+  # que muere el /healthz hasta que el servicio sale del catálogo: 82.7s y 86.7s
+  # (2 muestras, el barrido es periódico y el valor tiene jitter). Leer
+  # docs/consul-ttl.md antes de fijar cualquier espera en la demo (tarea 23).
   consul:
     image: hashicorp/consul:1.17
     container_name: barberflow-consul
