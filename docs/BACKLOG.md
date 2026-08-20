@@ -33,17 +33,22 @@ Actualizado al 20 de agosto de 2026. Un PR por tarea; el historial queda como ev
 | 6 | `shared/db.py` — pool + healthz/readyz | ES | ✅ Hecho | [#3](https://github.com/Esaban17/barberflow-microservices/pull/3) |
 | 5 | `shared/logging.py` — JSON + correlation-id | ES | ✅ Hecho | [#4](https://github.com/Esaban17/barberflow-microservices/pull/4) |
 | 8 | `shared/consul.py` — registro y descubrimiento | ES | ✅ Hecho | [#5](https://github.com/Esaban17/barberflow-microservices/pull/5) |
-| 9 | `shared/resilience.py` | ES | 🔄 En curso | — |
-| 23 | TTL real de desregistro de Consul | ES | 🔄 En curso | — |
+| 23 | TTL real de desregistro de Consul | ES | ✅ Hecho | [#6](https://github.com/Esaban17/barberflow-microservices/pull/6) |
+| 9 | `shared/resilience.py` — timeout, reintentos, breaker | ES | ✅ Hecho | [#7](https://github.com/Esaban17/barberflow-microservices/pull/7) |
 
 **Bloqueadas por AM:** todas las demás tareas de ES (11, 13, 16, 21, 24, 26, 28, 29, 31, 32, 37, 38, 40)
 dependen de entregables de Andre — los `init.sql` de las tres bases (10, 14, 20), los Dockerfiles y el
-registro en Consul de cada servicio (12, 18, 22), y la nota de API del `a2a-sdk` (3).
+registro en Consul de cada servicio (12, 18, 22), y la nota de API del `a2a-sdk` (3). Con eso, **todas las
+tareas de ES que no dependían de AM están terminadas**.
 
 **Hallazgo que corrige el enunciado:** Consul 1.17 impone un mínimo de 1 minuto a
 `deregister_critical_service_after`, así que los 30s que pide el PDF no se cumplen: eleva el valor en
-silencio y solo lo registra en el log del agente. Las tareas 24, 26 y 40 deben planificar su espera contra
-el número real (ver `docs/consul-ttl.md`, tarea 23).
+silencio y solo lo registra en el log del agente. Peor aún: el barrido de checks muertos es periódico, así
+que el TTL efectivo **medido** fue de **82.7s y 86.7s** (dos muestras, con jitter) — ni 30s ni 60s. Las
+tareas 24, 26 y 40 deben esperar ~90s. Evidencia y método en `docs/consul-ttl.md` (tarea 23).
+
+**Follow-up menor:** `shared/consul.py` sigue enviando `DEREGISTER_AFTER = "30s"`. Es inofensivo (Consul lo
+eleva solo) pero engañoso al leer el código; cambiarlo a `"1m"` cabe en la tarea 24 o 26.
 
 ### Cobertura de la rúbrica
 
