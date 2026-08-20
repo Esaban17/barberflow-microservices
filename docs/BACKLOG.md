@@ -26,7 +26,7 @@ Actualizado al 20 de agosto de 2026. Un PR por tarea; el historial queda como ev
 
 | # | Tarea | Asig. | Estado | PR |
 |---|---|---|---|---|
-| 1 | Scaffold, `.gitignore`, `.env.example` | AM | ✅ Hecho | commit inicial |
+| 1 | Scaffold, `.gitignore`, `.env.example` | AM | ✅ Hecho (absorbida) | commit inicial |
 | 2 | Repo público en GitHub | ES | ✅ Hecho | commit inicial |
 | 4 | `docker-compose.yml` base + red + Consul | ES | ✅ Hecho | [#1](https://github.com/Esaban17/barberflow-microservices/pull/1) |
 | 7 | `shared/auth.py` — JWT HS256 + 401 | ES | ✅ Hecho | [#2](https://github.com/Esaban17/barberflow-microservices/pull/2) |
@@ -35,6 +35,22 @@ Actualizado al 20 de agosto de 2026. Un PR por tarea; el historial queda como ev
 | 8 | `shared/consul.py` — registro y descubrimiento | ES | ✅ Hecho | [#5](https://github.com/Esaban17/barberflow-microservices/pull/5) |
 | 23 | TTL real de desregistro de Consul | ES | ✅ Hecho | [#6](https://github.com/Esaban17/barberflow-microservices/pull/6) |
 | 9 | `shared/resilience.py` — timeout, reintentos, breaker | ES | ✅ Hecho | [#7](https://github.com/Esaban17/barberflow-microservices/pull/7) |
+| — | Fix: truncamiento silencioso de contraseñas en bcrypt | ES | ✅ Hecho | [#8](https://github.com/Esaban17/barberflow-microservices/pull/8) |
+
+> **Sobre la tarea 1:** la hizo Estuardo dentro del commit inicial, no Andre. Toda tarea de ES
+> dependía de ella (es el scaffold del repo) y sin ella no había dónde abrir un PR. **Andre no
+> tiene que rehacerla.**
+
+**Lo siguiente que necesita hacer Andre**, en este orden — es lo que desbloquea el resto de ES:
+
+| # | Tarea | Desbloquea |
+|---|---|---|
+| 10 | `init.sql`/`init.sh` de `users_db` + rol de menor privilegio | 11 → 16, 29, 38 |
+| 14 | Esquema y seed de `booking_db` (servicios, barberos, slots, citas, outbox) | 15, 16, 17 |
+| 20 | Esquema de `notif_db` | 21 → 31, 38 |
+| 12 / 18 / 22 | `/healthz`, `/readyz`, registro en Consul y `Dockerfile` de cada servicio | 13, 37 |
+| 3 | Leer la API real de `a2a-sdk==1.1.2` y `mcp==2.0.0` instalados | 28 → 29, 31, 32 |
+| 19 | Llamada booking → notif usando `shared/resilience.py` (ya en `main`) | 24 → 26, 40 |
 
 **Bloqueadas por AM:** todas las demás tareas de ES (11, 13, 16, 21, 24, 26, 28, 29, 31, 32, 37, 38, 40)
 dependen de entregables de Andre — los `init.sql` de las tres bases (10, 14, 20), los Dockerfiles y el
