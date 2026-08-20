@@ -17,11 +17,16 @@
 #   consul                8500     ${CONSUL_PORT:-8500}            4
 #   orchestrator          9000     ${ORCHESTRATOR_PORT:-9000}     36
 #   booking-agent         9001     ${BOOKING_AGENT_PORT:-9001}    36
-#   notification-agent    9002     ${NOTIFICATION_AGENT_PORT:-9002} 36
+#   notification-agent    9002     ${NOTIFICATION_AGENT_PORT:-9002}  36
 #
 # Bases de datos (users-db, booking-db, notif-db): escuchan en 5432 dentro de la
 # red `barberflow` y NO publican puerto al host. Solo sus servicios las alcanzan,
 # por nombre de contenedor. Para inspeccionarlas: `docker compose exec <db> psql`.
+#
+# Ojo: en la máquina de desarrollo 8001 ya lo ocupa otro contenedor, así que el
+# .env local debe sobrescribir BOOKING_PORT (p. ej. 8011) antes de levantar
+# booking-svc. 5432 también está ocupado, pero como las BD no publican puerto no
+# hace falta override.
 # ─────────────────────────────────────────────────────────────────────────────
 
 networks:
