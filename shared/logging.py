@@ -87,19 +87,31 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
             if user_id is not None:
                 structlog.contextvars.bind_contextvars(user_id=user_id)
 
+        log = get_logger().bind(method=request.method, path=request.url.path)
         started = time.perf_counter()
         try:
             response = await call_next(request)
-            response.headers[CORRELATION_ID_HEADER] = correlation_id
-            get_logger().info(
+        except Exception as exc:
+            # Un request que revienta sin dejar rastro es peor que uno lento: se
+            # deja la línea y se re-lanza. El middleware observa, no traga; el
+            # manejo de la excepción sigue siendo de Starlette.
+            log.error(
                 "http_request",
-                method=request.method,
-                path=request.url.path,
+                status_code=500,
+                duration_ms=round((time.perf_counter() - started) * 1000, 2),
+                exception=type(exc).__name__,
+            )
+            raise
+        else:
+            response.headers[CORRELATION_ID_HEADER] = correlation_id
+            log.info(
+                "http_request",
                 status_code=response.status_code,
                 duration_ms=round((time.perf_counter() - started) * 1000, 2),
             )
             return response
         finally:
+            # Corre en los dos caminos: el contexto nunca se filtra al siguiente request.
             structlog.contextvars.clear_contextvars()
 
 
@@ -124,26 +136,39 @@ if __name__ == "__main__":
     def ping() -> dict[str, str]:
         return correlation_headers()
 
-    async def two_requests() -> tuple[httpx.Response, httpx.Response]:
+    @app.get("/boom")
+    def boom() -> dict[str, str]:
+        raise RuntimeError("kaboom")
+
+    async def drive_requests() -> tuple[httpx.Response, httpx.Response, str]:
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            return (
-                await client.get(
-                    "/ping",
-                    headers={CORRELATION_ID_HEADER: "abc-123", "x-test-user": "u-42"},
-                ),
-                await client.get("/ping"),
+            first = await client.get(
+                "/ping",
+                headers={CORRELATION_ID_HEADER: "abc-123", "x-test-user": "u-42"},
             )
+            try:
+                await client.get(
+                    "/boom",
+                    headers={CORRELATION_ID_HEADER: "boom-1", "x-test-user": "u-99"},
+                )
+                raised = ""
+            except RuntimeError as exc:
+                raised = str(exc)
+            # El request sano va después del que revienta: si el camino de error no
+            # limpiara el contexto, este heredaría el user_id "u-99".
+            second = await client.get("/ping")
+            return first, second, raised
 
     buffer = io.StringIO()
     with contextlib.redirect_stdout(buffer):
-        # Los dos requests corren en la misma tarea a propósito: TestClient lanza
-        # cada uno en su propia tarea y ahí una fuga de contexto sería indetectable.
-        first, second = asyncio.run(two_requests())
+        # Los requests corren en la misma tarea a propósito: TestClient lanza cada
+        # uno en su propia tarea y ahí una fuga de contexto sería indetectable.
+        first, second, raised = asyncio.run(drive_requests())
 
     raw_lines = buffer.getvalue().splitlines()
-    assert len(raw_lines) == 2, raw_lines
-    first_line, second_line = (json.loads(line) for line in raw_lines)
+    assert len(raw_lines) == 3, raw_lines
+    first_line, error_line, second_line = (json.loads(line) for line in raw_lines)
 
     # Un correlation id entrante se respeta y vuelve en la respuesta.
     assert first.headers[CORRELATION_ID_HEADER] == "abc-123"
@@ -168,10 +193,23 @@ if __name__ == "__main__":
     # El user_id del token (aquí simulado) viaja junto al correlation_id.
     assert first_line["user_id"] == "u-42"
 
+    # Un request que revienta deja línea de error con el mismo contexto y se re-lanza.
+    assert error_line["level"] == "error"
+    assert error_line["event"] == "http_request"
+    assert error_line["correlation_id"] == "boom-1"
+    assert error_line["user_id"] == "u-99"
+    assert error_line["path"] == "/boom"
+    assert error_line["status_code"] == 500
+    assert error_line["exception"] == "RuntimeError"
+    assert raised == "kaboom", "el middleware observa, no traga: la excepción se re-lanza"
+
     # El contexto no se filtra: ni al siguiente request ni fuera de los requests.
     assert "user_id" not in second_line, second_line
     assert structlog.contextvars.get_contextvars() == {}
     assert correlation_headers() == {}
 
     print(buffer.getvalue(), end="")
-    print("self-check OK: JSON válido, correlation_id propagado y generado, user_id presente, sin fugas de contexto")
+    print(
+        "self-check OK: JSON válido, correlation_id propagado y generado, user_id presente,"
+        " request fallido logueado con level=error y re-lanzado, sin fugas de contexto"
+    )
