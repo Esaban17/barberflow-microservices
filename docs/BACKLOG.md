@@ -20,6 +20,31 @@
 El reparto AM/ES se hizo **al azar** (`random.shuffle` balanceado), no por afinidad técnica. Cada tarea se
 replica como *issue* en el repositorio de GitHub (tarea 2) para que la entrega sea trazable.
 
+### Estado de avance
+
+Actualizado al 20 de agosto de 2026. Un PR por tarea; el historial queda como evidencia de la entrega.
+
+| # | Tarea | Asig. | Estado | PR |
+|---|---|---|---|---|
+| 1 | Scaffold, `.gitignore`, `.env.example` | AM | ✅ Hecho | commit inicial |
+| 2 | Repo público en GitHub | ES | ✅ Hecho | commit inicial |
+| 4 | `docker-compose.yml` base + red + Consul | ES | ✅ Hecho | [#1](https://github.com/Esaban17/barberflow-microservices/pull/1) |
+| 7 | `shared/auth.py` — JWT HS256 + 401 | ES | ✅ Hecho | [#2](https://github.com/Esaban17/barberflow-microservices/pull/2) |
+| 6 | `shared/db.py` — pool + healthz/readyz | ES | ✅ Hecho | [#3](https://github.com/Esaban17/barberflow-microservices/pull/3) |
+| 5 | `shared/logging.py` — JSON + correlation-id | ES | ✅ Hecho | [#4](https://github.com/Esaban17/barberflow-microservices/pull/4) |
+| 8 | `shared/consul.py` — registro y descubrimiento | ES | ✅ Hecho | [#5](https://github.com/Esaban17/barberflow-microservices/pull/5) |
+| 9 | `shared/resilience.py` | ES | 🔄 En curso | — |
+| 23 | TTL real de desregistro de Consul | ES | 🔄 En curso | — |
+
+**Bloqueadas por AM:** todas las demás tareas de ES (11, 13, 16, 21, 24, 26, 28, 29, 31, 32, 37, 38, 40)
+dependen de entregables de Andre — los `init.sql` de las tres bases (10, 14, 20), los Dockerfiles y el
+registro en Consul de cada servicio (12, 18, 22), y la nota de API del `a2a-sdk` (3).
+
+**Hallazgo que corrige el enunciado:** Consul 1.17 impone un mínimo de 1 minuto a
+`deregister_critical_service_after`, así que los 30s que pide el PDF no se cumplen: eleva el valor en
+silencio y solo lo registra en el log del agente. Las tareas 24, 26 y 40 deben planificar su espera contra
+el número real (ver `docs/consul-ttl.md`, tarea 23).
+
 ### Cobertura de la rúbrica
 
 | Criterio del PDF | Pts | Tareas |
