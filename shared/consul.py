@@ -265,8 +265,16 @@ if __name__ == "__main__":
                 os.environ["CONSUL_HTTP_ADDR"] = "http://localhost:1"
                 async with registered("barberflow-sin-consul", 1234) as sid:
                     assert sid is None, sid
-                os.environ["CONSUL_HTTP_ADDR"] = consul_url
                 print("[9] registered() con Consul inalcanzable: el lifespan entra y sale igual")
+
+                # Consul caído también es ServiceUnavailable, no un httpx.ConnectError suelto:
+                # el outbox de la tarea 24 tiene que atrapar este caso igual que la lista vacía.
+                try:
+                    await discover(ok_name)
+                    raise AssertionError("discover() con Consul caído no lanzó ServiceUnavailable")
+                except ServiceUnavailable as exc:
+                    print(f"[10] discover() con Consul caído -> ServiceUnavailable: {exc}")
+                os.environ["CONSUL_HTTP_ADDR"] = consul_url
 
             print("\nOK — self-check completo, sin excepciones")
         finally:
