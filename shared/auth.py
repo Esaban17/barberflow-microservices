@@ -9,7 +9,9 @@ import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-# bcrypt 5 rechaza contraseñas de más de 72 bytes: se truncan igual en hash y verify.
+# bcrypt no mira más allá de 72 bytes y bcrypt 5 lanza ValueError en vez de truncar.
+# Dejamos que ese error suba: truncar en silencio haría que dos contraseñas distintas
+# con el mismo prefijo de 72 bytes sirvieran indistintamente para entrar.
 _BCRYPT_MAX_BYTES = 72
 
 _bearer = HTTPBearer(auto_error=False)
@@ -24,11 +26,16 @@ def _secret() -> str:
 
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode()[:_BCRYPT_MAX_BYTES], bcrypt.gensalt()).decode()
+    """Lanza ValueError si la contraseña pasa de 72 bytes: quien registra debe rechazarla."""
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 def verify_password(password: str, hashed: str) -> bool:
-    return bcrypt.checkpw(password.encode()[:_BCRYPT_MAX_BYTES], hashed.encode())
+    # Una contraseña demasiado larga no puede haber generado ningún hash almacenado,
+    # porque hash_password la rechaza: no coincide con nada.
+    if len(password.encode()) > _BCRYPT_MAX_BYTES:
+        return False
+    return bcrypt.checkpw(password.encode(), hashed.encode())
 
 
 def create_access_token(user_id: int | str, email: str, role: str) -> str:
@@ -100,6 +107,16 @@ if __name__ == "__main__":
         return {"user_id": user.user_id, "email": user.email, "role": user.role}
 
     client = TestClient(app)
+
+    # 0. Una contraseña de más de 72 bytes se rechaza en vez de truncarse en silencio:
+    #    si se truncara, cualquier variante con el mismo prefijo entraría igual.
+    larga = "a" * 80
+    try:
+        hash_password(larga)
+        raise AssertionError("hash_password debió rechazar una contraseña de más de 72 bytes")
+    except ValueError:
+        pass
+    assert verify_password(larga, hash_password("a" * 72)) is False
 
     # 1. Round-trip de contraseña.
     hashed = hash_password("barberia123")
