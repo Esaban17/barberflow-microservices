@@ -1,32 +1,36 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# BarberFlow — compose base: red compartida + Consul.
-# Los demás servicios se agregan en las tareas 13, 18, 22, 28 y 36 del backlog.
+# BarberFlow — sistema completo: 3 microservicios con BD propia, Consul y la web.
+# El MCP Server (tarea 28) y los agentes A2A (tarea 36) se agregan después.
 #
 # MAPA DE PUERTOS
 # El puerto interno (el que escucha el proceso dentro del contenedor) es fijo y
 # es el del PDF del curso. El puerto del host es overridable por variable de
-# entorno, porque en la máquina de desarrollo 8001 y 5432 ya están ocupados.
+# entorno, porque en la máquina de desarrollo 8001, 5432 y 3000 ya están ocupados.
 # Las variables se definen en .env (copiar de .env.example).
 #
-#   Servicio             Interno   Host (override)              Tarea
-#   ───────────────────────────────────────────────────────────────────
-#   barberflow-mcp        8000     ${MCP_PORT:-8000}              28
-#   booking-svc           8001     ${BOOKING_PORT:-8001}          18
-#   notif-svc             8002     ${NOTIF_PORT:-8002}            22
-#   users-svc             8003     ${USERS_PORT:-8003}            13
-#   consul                8500     ${CONSUL_PORT:-8500}            4
-#   orchestrator          9000     ${ORCHESTRATOR_PORT:-9000}     36
-#   booking-agent         9001     ${BOOKING_AGENT_PORT:-9001}    36
-#   notification-agent    9002     ${NOTIFICATION_AGENT_PORT:-9002}  36
+#   Servicio             Interno   Host (override)                  Tarea
+#   ───────────────────────────────────────────────────────────────────────
+#   barberflow-mcp        8000     ${MCP_PORT:-8000}                  28
+#   booking-svc           8001     ${BOOKING_PORT:-8001}              18
+#   notif-svc             8002     ${NOTIF_PORT:-8002}                22
+#   users-svc             8003     ${USERS_PORT:-8003}                13
+#   consul                8500     ${CONSUL_PORT:-8500}                4
+#   web-ui                3000     ${WEB_PORT:-3080}                  43
+#   orchestrator          9000     ${ORCHESTRATOR_PORT:-9000}         36
+#   booking-agent         9001     ${BOOKING_AGENT_PORT:-9001}        36
+#   notification-agent    9002     ${NOTIFICATION_AGENT_PORT:-9002}   36
 #
 # Bases de datos (users-db, booking-db, notif-db): escuchan en 5432 dentro de la
 # red `barberflow` y NO publican puerto al host. Solo sus servicios las alcanzan,
 # por nombre de contenedor. Para inspeccionarlas: `docker compose exec <db> psql`.
 #
-# Ojo: en la máquina de desarrollo 8001 ya lo ocupa otro contenedor, así que el
-# .env local debe sobrescribir BOOKING_PORT (p. ej. 8011) antes de levantar
-# booking-svc. 5432 también está ocupado, pero como las BD no publican puerto no
-# hace falta override.
+# DATABASE_PER_SERVICE: cada servicio se conecta con SU usuario de aplicación
+# (permisos DML, sin DDL), nunca con el superusuario de Postgres. El rol lo crea
+# el init.sh de cada servicio a partir de APP_DB_USER/APP_DB_PASSWORD.
+#
+# Ojo: en la máquina de desarrollo 8001 lo ocupa otro contenedor y 3000 también,
+# por eso WEB_PORT sale por defecto en 3080 y BOOKING_PORT conviene sobrescribirlo
+# en el .env local (p. ej. 8011).
 # ─────────────────────────────────────────────────────────────────────────────
 
 networks:
@@ -34,9 +38,36 @@ networks:
   barberflow:
     driver: bridge
 
+volumes:
+  users-db-data:
+  booking-db-data:
+  notif-db-data:
+
+# Bloque común de los tres servicios Python: misma imagen base, mismo shared/.
+x-svc-common: &svc-common
+  build:
+    context: .
+  networks:
+    - barberflow
+  environment: &svc-env
+    CONSUL_HTTP_ADDR: http://consul:8500
+    JWT_SECRET: ${JWT_SECRET}
+    JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-60}
+  depends_on:
+    consul:
+      condition: service_healthy
+  restart: unless-stopped
+
+x-db-common: &db-common
+  image: postgres:16-alpine
+  networks:
+    - barberflow
+  restart: unless-stopped
+
 services:
-  # Service registry. `-dev` mantiene el estado en memoria: suficiente para la
-  # demo del curso y evita tener que versionar un volumen.
+  # ── Service registry ───────────────────────────────────────────────────────
+  # `-dev` mantiene el estado en memoria: suficiente para la demo del curso y
+  # evita tener que versionar un volumen.
   #
   # OJO con el TTL de desregistro: el PDF dice 30s y es falso. Cronometrado desde
   # que muere el /healthz hasta que el servicio sale del catálogo: 82.7s y 86.7s
@@ -57,4 +88,140 @@ services:
       timeout: 3s
       retries: 5
       start_period: 5s
+    restart: unless-stopped
+
+  # ── users-svc :8003 ────────────────────────────────────────────────────────
+  users-db:
+    <<: *db-common
+    container_name: barberflow-users-db
+    environment:
+      POSTGRES_USER: ${USERS_DB_SUPERUSER}
+      POSTGRES_PASSWORD: ${USERS_DB_SUPERPASSWORD}
+      POSTGRES_DB: ${USERS_DB_NAME}
+      APP_DB_USER: ${USERS_APP_USER}
+      APP_DB_PASSWORD: ${USERS_APP_PASSWORD}
+    volumes:
+      - ./services/users-svc/db:/docker-entrypoint-initdb.d:ro
+      - users-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  users-svc:
+    <<: *svc-common
+    container_name: barberflow-users-svc
+    build:
+      context: .
+      dockerfile: services/users-svc/Dockerfile
+    ports:
+      - "${USERS_PORT:-8003}:8003"
+    environment:
+      <<: *svc-env
+      SERVICE_NAME: users-svc
+      SERVICE_ADDRESS: users-svc
+      SERVICE_PORT: 8003
+      DATABASE_URL: postgresql://${USERS_APP_USER}:${USERS_APP_PASSWORD}@users-db:5432/${USERS_DB_NAME}
+    depends_on:
+      consul:
+        condition: service_healthy
+      users-db:
+        condition: service_healthy
+
+  # ── booking-svc :8001 ──────────────────────────────────────────────────────
+  booking-db:
+    <<: *db-common
+    container_name: barberflow-booking-db
+    environment:
+      POSTGRES_USER: ${BOOKING_DB_SUPERUSER}
+      POSTGRES_PASSWORD: ${BOOKING_DB_SUPERPASSWORD}
+      POSTGRES_DB: ${BOOKING_DB_NAME}
+      APP_DB_USER: ${BOOKING_APP_USER}
+      APP_DB_PASSWORD: ${BOOKING_APP_PASSWORD}
+    volumes:
+      - ./services/booking-svc/db:/docker-entrypoint-initdb.d:ro
+      - booking-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  booking-svc:
+    <<: *svc-common
+    container_name: barberflow-booking-svc
+    build:
+      context: .
+      dockerfile: services/booking-svc/Dockerfile
+    ports:
+      - "${BOOKING_PORT:-8001}:8001"
+    environment:
+      <<: *svc-env
+      SERVICE_NAME: booking-svc
+      SERVICE_ADDRESS: booking-svc
+      SERVICE_PORT: 8001
+      DATABASE_URL: postgresql://${BOOKING_APP_USER}:${BOOKING_APP_PASSWORD}@booking-db:5432/${BOOKING_DB_NAME}
+    depends_on:
+      consul:
+        condition: service_healthy
+      booking-db:
+        condition: service_healthy
+
+  # ── notif-svc :8002 ────────────────────────────────────────────────────────
+  notif-db:
+    <<: *db-common
+    container_name: barberflow-notif-db
+    environment:
+      POSTGRES_USER: ${NOTIF_DB_SUPERUSER}
+      POSTGRES_PASSWORD: ${NOTIF_DB_SUPERPASSWORD}
+      POSTGRES_DB: ${NOTIF_DB_NAME}
+      APP_DB_USER: ${NOTIF_APP_USER}
+      APP_DB_PASSWORD: ${NOTIF_APP_PASSWORD}
+    volumes:
+      - ./services/notif-svc/db:/docker-entrypoint-initdb.d:ro
+      - notif-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  notif-svc:
+    <<: *svc-common
+    container_name: barberflow-notif-svc
+    build:
+      context: .
+      dockerfile: services/notif-svc/Dockerfile
+    ports:
+      - "${NOTIF_PORT:-8002}:8002"
+    environment:
+      <<: *svc-env
+      SERVICE_NAME: notif-svc
+      SERVICE_ADDRESS: notif-svc
+      SERVICE_PORT: 8002
+      DATABASE_URL: postgresql://${NOTIF_APP_USER}:${NOTIF_APP_PASSWORD}@notif-db:5432/${NOTIF_DB_NAME}
+    depends_on:
+      consul:
+        condition: service_healthy
+      notif-db:
+        condition: service_healthy
+
+  # ── web-ui :3000 (Next.js) ─────────────────────────────────────────────────
+  # El navegador solo habla con Next; sus route handlers hacen de BFF y resuelven
+  # a qué servicio llamar preguntándole a Consul. Así no hay CORS ni URLs de
+  # servicio hardcodeadas en el cliente.
+  web-ui:
+    build:
+      context: ./web-ui
+    container_name: barberflow-web
+    ports:
+      - "${WEB_PORT:-3080}:3000"
+    networks:
+      - barberflow
+    environment:
+      CONSUL_HTTP_ADDR: http://consul:8500
+    depends_on:
+      consul:
+        condition: service_healthy
     restart: unless-stopped
