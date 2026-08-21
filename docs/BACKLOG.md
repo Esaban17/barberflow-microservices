@@ -7,26 +7,25 @@
 
 ---
 
-## Resumen
+## Cómo está repartido el trabajo
 
-| | |
+Reasignado el 21 de agosto de 2026. La regla es simple: **Andre solo tiene tareas que no bloquean a
+nadie**. Todo lo que está en la ruta crítica —los tres microservicios, el MCP y el núcleo de la web—
+lo lleva Estuardo, para que el sistema se pueda levantar en local sin esperar a nadie.
+
+| | Tareas |
 |---|---|
-| Total de tareas | **42** |
-| Andre Morales (AM) | 21 |
-| Estuardo Sabán (ES) | 21 |
-| Fases | 10 (se ejecutan en orden; dentro de una fase, lo que no comparte dependencia va en paralelo) |
-| Rúbrica cubierta | 110 pts + 15 extra (despliegue cloud) |
+| **ES — ruta crítica** | 2, 4–26, 28–32, 37, 40, 43–46 |
+| **AM — nada de esto bloquea** | 3, 27, 33–36, 38, 39, 41, 42, 47 |
 
-El reparto AM/ES se hizo **al azar** (`random.shuffle` balanceado), no por afinidad técnica. Cada tarea se
-replica como *issue* en el repositorio de GitHub (tarea 2) para que la entrega sea trazable.
+Cada tarea (o grupo de tareas de un mismo servicio) va en su propio PR; el historial de PRs es parte
+de la evidencia de la entrega.
 
-### Estado de avance
-
-Actualizado al 20 de agosto de 2026. Un PR por tarea; el historial queda como evidencia de la entrega.
+## Estado de avance
 
 | # | Tarea | Asig. | Estado | PR |
 |---|---|---|---|---|
-| 1 | Scaffold, `.gitignore`, `.env.example` | AM | ✅ Hecho (absorbida) | commit inicial |
+| 1 | Scaffold, `.gitignore`, `.env.example` | ES | ✅ Hecho | commit inicial |
 | 2 | Repo público en GitHub | ES | ✅ Hecho | commit inicial |
 | 4 | `docker-compose.yml` base + red + Consul | ES | ✅ Hecho | [#1](https://github.com/Esaban17/barberflow-microservices/pull/1) |
 | 7 | `shared/auth.py` — JWT HS256 + 401 | ES | ✅ Hecho | [#2](https://github.com/Esaban17/barberflow-microservices/pull/2) |
@@ -36,35 +35,20 @@ Actualizado al 20 de agosto de 2026. Un PR por tarea; el historial queda como ev
 | 23 | TTL real de desregistro de Consul | ES | ✅ Hecho | [#6](https://github.com/Esaban17/barberflow-microservices/pull/6) |
 | 9 | `shared/resilience.py` — timeout, reintentos, breaker | ES | ✅ Hecho | [#7](https://github.com/Esaban17/barberflow-microservices/pull/7) |
 | — | Fix: truncamiento silencioso de contraseñas en bcrypt | ES | ✅ Hecho | [#8](https://github.com/Esaban17/barberflow-microservices/pull/8) |
+| — | Contrato de APIs (`docs/API.md`) + compose completo | ES | ✅ Hecho | commit directo |
+| 10–13 | **users-svc** completo | ES | 🔄 En curso | — |
+| 20–22 | **notif-svc** completo | ES | 🔄 En curso | — |
+| 14–19, 24, 25 | **booking-svc** completo + outbox + `/admin/circuit` | ES | 🔄 En curso | — |
+| 43–46 | **web-ui** (Next.js): BFF, auth, reservar, mis citas | ES | 🔄 En curso | — |
 
-> **Sobre la tarea 1:** la hizo Estuardo dentro del commit inicial, no Andre. Toda tarea de ES
-> dependía de ella (es el scaffold del repo) y sin ella no había dónde abrir un PR. **Andre no
-> tiene que rehacerla.**
+> La tarea 1 la hizo Estuardo dentro del commit inicial: toda tarea de ES dependía de ella y sin el
+> scaffold no había dónde abrir un PR. **No hay que rehacerla.**
 
-**Lo siguiente que necesita hacer Andre**, en este orden — es lo que desbloquea el resto de ES:
+## Objetivo inmediato
 
-| # | Tarea | Desbloquea |
-|---|---|---|
-| 10 | `init.sql`/`init.sh` de `users_db` + rol de menor privilegio | 11 → 16, 29, 38 |
-| 14 | Esquema y seed de `booking_db` (servicios, barberos, slots, citas, outbox) | 15, 16, 17 |
-| 20 | Esquema de `notif_db` | 21 → 31, 38 |
-| 12 / 18 / 22 | `/healthz`, `/readyz`, registro en Consul y `Dockerfile` de cada servicio | 13, 37 |
-| 3 | Leer la API real de `a2a-sdk==1.1.2` y `mcp==2.0.0` instalados | 28 → 29, 31, 32 |
-| 19 | Llamada booking → notif usando `shared/resilience.py` (ya en `main`) | 24 → 26, 40 |
-
-**Bloqueadas por AM:** todas las demás tareas de ES (11, 13, 16, 21, 24, 26, 28, 29, 31, 32, 37, 38, 40)
-dependen de entregables de Andre — los `init.sql` de las tres bases (10, 14, 20), los Dockerfiles y el
-registro en Consul de cada servicio (12, 18, 22), y la nota de API del `a2a-sdk` (3). Con eso, **todas las
-tareas de ES que no dependían de AM están terminadas**.
-
-**Hallazgo que corrige el enunciado:** Consul 1.17 impone un mínimo de 1 minuto a
-`deregister_critical_service_after`, así que los 30s que pide el PDF no se cumplen: eleva el valor en
-silencio y solo lo registra en el log del agente. Peor aún: el barrido de checks muertos es periódico, así
-que el TTL efectivo **medido** fue de **82.7s y 86.7s** (dos muestras, con jitter) — ni 30s ni 60s. Las
-tareas 24, 26 y 40 deben esperar ~90s. Evidencia y método en `docs/consul-ttl.md` (tarea 23).
-
-**Follow-up menor:** `shared/consul.py` sigue enviando `DEREGISTER_AFTER = "30s"`. Es inofensivo (Consul lo
-eleva solo) pero engañoso al leer el código; cambiarlo a `"1m"` cabe en la tarea 24 o 26.
+Levantar el sistema en local con `docker compose up --build`: los **tres microservicios registrados y
+en verde en Consul** (`localhost:8500`) y la **app web** consumiéndolos. Es lo que están construyendo
+las cuatro tareas en curso.
 
 ### Cobertura de la rúbrica
 
@@ -77,6 +61,7 @@ eleva solo) pero engañoso al leer el código; cambiarlo a `"1m"` cabe en la tar
 | JWT implementado + secretos fuera del código | 10 | 1, 5, 7, 11, 16, 29, 38, 42 |
 | Agent-to-Agent | 20 | 3, 33–36, 39 |
 | **Extra** — despliegue cloud | +15 | 41 |
+| _Fuera del PDF, pedido por el equipo_ | — | 43–47 (app web) |
 
 ### Convenciones de dominio (PDF → BarberFlow)
 
@@ -90,105 +75,78 @@ eleva solo) pero engañoso al leer el código; cambiarlo a `"1m"` cabe en la tar
 
 ---
 
-## Fase 1 — Scaffold y repositorio
+## Tareas de Andre (AM)
 
-| # | Tarea | Asig. | Dep. | Done cuando |
-|---|---|---|---|---|
-| 1 | Estructura de carpetas + `.gitignore` (`.env`, `__pycache__`, `.venv`) + `.env.example` con placeholders de **todos** los secretos | AM | — | La estructura coincide con el plan y `.env.example` no tiene ningún valor real |
-| 2 | `git init`, commit inicial, `gh repo create Esaban17/barberflow-microservices --public` + push + issues del backlog | ES | 1 | Repo público existe, `git status` no lista `.env`, `.env.example` sí está trackeado |
-| 3 | venv con las libs pineadas y **leer los paquetes instalados** `a2a-sdk==1.1.2` y `mcp==2.0.0` para fijar su API real (clases, ruta de la card, `message/send`) | AM | — | Nota en `docs/` con las firmas reales que usarán las fases 7 y 8 |
-| 4 | Mapa de puertos con override (`${BOOKING_PORT:-8001}`) y `docker-compose.yml` base (red + Consul) | ES | 1 | `docker compose config` es válido y ningún puerto choca con lo que ya corre en la máquina |
+Ninguna de estas bloquea a nadie: se pueden hacer en cualquier orden, en paralelo con la ruta crítica.
 
-## Fase 2 — `shared/` (base común de los 6 servicios)
+| # | Tarea | Dep. | Done cuando |
+|---|---|---|---|
+| 3 | Leer los paquetes instalados `a2a-sdk==1.1.2` y `mcp==2.0.0` y anotar en `docs/` su API real (clases, ruta de la Agent Card, método `message/send`) | — | Existe la nota con las firmas reales, no escritas de memoria |
+| 27 | Trazabilidad: comprobar que un mismo `correlation_id` se ve en users-svc → booking-svc → notif-svc | 10–22 | `docker compose logs \| jq 'select(.correlation_id=="…")'` muestra el viaje completo |
+| 33 | `booking-agent` :9001 con `a2a-sdk`, Agent Card en `/.well-known/agent.json` **y** `/.well-known/agent-card.json`, skills vía MCP | 3, 30 | La card valida y `create_booking` por A2A crea la cita |
+| 34 | `notification-agent` :9002, mismas dos rutas de card, skills vía MCP | 3, 31 | Notificación enviada por delegación A2A |
+| 35 | `orchestrator` :9000: lee `AGENT_URLS`, descarga las cards y elige por `skills`; interpreta con la API de Claude y cae a keywords si no hay key | 33, 34 | *"Resérvame corte y barba el viernes y avísame"* reserva y notifica, y funciona sin `ANTHROPIC_API_KEY` |
+| 36 | Los 3 agentes en el compose + logs A2A en JSON con `correlation_id` | 35 | Los logs muestran la delegación agente → agente paso a paso |
+| 38 | README: gestión de secretos + **rotación de credenciales sin downtime** (pasos probados) | 10, 20 | La rotación se ejecuta de verdad sin que caiga ningún servicio |
+| 39 | README: sección **Agent-to-Agent** explicando la diferencia entre MCP y A2A | 36 | Explica la diferencia con el diagrama del flujo real del proyecto |
+| 41 | Despliegue en Railway: servicios, secretos como Variables del proveedor, URLs públicas, captura de Consul en la nube y guía paso a paso | 37 | Los servicios responden por URL pública y el compose local sigue funcionando |
+| 42 | `ENTREGA.md` con checklist de la rúbrica (110 + 15) y evidencias + auditoría final de secretos en el historial de git | 40, 41 | Cada criterio del PDF tiene su fila, su estado y su evidencia enlazada |
+| 47 | Panel de estado en la web: servicios registrados en Consul + estado del circuit breaker (`/admin/circuit`) | 25, 43 | La página muestra los 3 servicios en verde y el breaker abriéndose al caer notif-svc |
 
-| # | Tarea | Asig. | Dep. | Done cuando |
-|---|---|---|---|---|
-| 5 | `shared/logging.py`: structlog JSON + contextvar + middleware que genera/propaga `x-correlation-id` y **decodifica el JWT ahí mismo** para tener `user_id` en la línea del request | ES | 1 | El log emite `timestamp, level, service, event, correlation_id, user_id` |
-| 6 | `shared/db.py`: pool psycopg3 + helpers `healthz`/`readyz` (`SELECT 1`, 503 si falla) | ES | 1 | `readyz` responde 503 con la BD apagada y 200 con ella arriba |
-| 7 | `shared/auth.py`: emitir/verificar JWT HS256 (`sub`, `email`, `role`, `exp`) + dependencia FastAPI que responde **401** | ES | 1 | Token manipulado y token expirado → 401 |
-| 8 | `shared/consul.py`: `register()`/`deregister()` en el lifespan + `discover(name)` de instancias *passing* que **trata la lista vacía como fallo, no como `IndexError`** | ES | 1 | `discover("inexistente")` levanta el error esperado, no un 500 |
-| 9 | `shared/resilience.py`: httpx timeout 2s + tenacity (3 intentos, 0.5/1/2s + jitter) + pybreaker (3 fallos → 30s) + propagación del correlation-id saliente | ES | 5, 8 | Contra un endpoint muerto: 3 reintentos y el breaker abre |
-
-## Fase 3 — users-svc (:8003)
-
-| # | Tarea | Asig. | Dep. | Done cuando |
-|---|---|---|---|---|
-| 10 | `init.sql` (tabla `users`) + `init.sh` con el rol `users_app` de menor privilegio | AM | 1 | `users_app` hace DML pero `DROP TABLE` le es denegado |
-| 11 | `POST /register`, `POST /login` (devuelve JWT), `GET /users/{id}` | ES | 7, 10 | Registro → login → token decodificable con el `user_id` correcto |
-| 12 | `/healthz`, `/readyz`, registro en Consul y `Dockerfile` | AM | 6, 8 | El contenedor levanta y aparece verde en Consul |
-| 13 | `users-svc` + `users-db` en el compose con sus variables de entorno | ES | 4, 12 | `docker compose up users-svc` deja el healthz en 200 |
-
-## Fase 4 — booking-svc (:8001)
-
-| # | Tarea | Asig. | Dep. | Done cuando |
-|---|---|---|---|---|
-| 14 | `init.sql`/`init.sh`: `services`, `barbers`, `slots`, `appointments`, `outbox` + seed (5 servicios de barbería, 3 barberos, slots de 7 días) | AM | 1 | `GET /slots` devuelve datos reales sin insertar nada a mano |
-| 15 | `GET /services` y `GET /slots?date=&service_id=&barber_id=` | AM | 14 | Los filtros funcionan y los slots ya reservados no aparecen |
-| 16 | `POST /appointments` con JWT **+ validación del usuario llamando a `GET /users/{id}` de users-svc** (nunca leyendo `users_db`) | ES | 7, 11, 14 | Sin token → 401; con token válido → 201 y fila en `appointments` |
-| 17 | `GET /appointments/{id}` y `DELETE /appointments/{id}` (cancelar libera el slot) | AM | 16 | Tras cancelar, el slot vuelve a estar disponible |
-| 18 | `/healthz`, `/readyz`, Consul, `Dockerfile` y entrada en compose con `booking-db` | AM | 6, 8, 12 | Verde en Consul junto a users-svc |
-| 19 | Llamada booking → notif **descubriendo por Consul** y envuelta en `shared/resilience` | AM | 9, 16 | Con notif-svc arriba la cita genera notificación; la URL no está hardcodeada en ningún lado |
-
-## Fase 5 — notif-svc (:8002)
-
-| # | Tarea | Asig. | Dep. | Done cuando |
-|---|---|---|---|---|
-| 20 | `init.sql`/`init.sh` + tabla `notifications` (incluye `correlation_id`) | AM | 1 | Rol de menor privilegio verificado igual que en la tarea 10 |
-| 21 | `POST /notifications` (log + persistencia) y `GET /notifications?user_id=` | ES | 20 | El historial por usuario devuelve lo enviado |
-| 22 | `/healthz`, `/readyz`, Consul, `Dockerfile` y compose con `notif-db` | AM | 6, 8 | Los **3 servicios** en verde en `localhost:8500` (captura de la rúbrica) |
-
-## Fase 6 — Resiliencia y observabilidad end-to-end
-
-| # | Tarea | Asig. | Dep. | Done cuando |
-|---|---|---|---|---|
-| 23 | Consul en compose + **verificar el TTL real** que aplica a `deregister_critical_service_after` (`GET /v1/agent/checks`) y ajustar la demo a ese número | ES | 4 | El valor real queda documentado en el README y usado en `demo.sh` |
-| 24 | Outbox: al abrirse el breaker o agotarse los reintentos, la notificación se guarda `pending` y **la cita se crea igual**; task en background reintenta cada 15s | ES | 19 | Con notif-svc caído: 201 + fila `pending`; al volver, pasa a `sent` sola |
-| 25 | `GET /admin/circuit` con estado del breaker y conteo del outbox | AM | 24 | Devuelve `open`/`closed` y el pendiente real |
-| 26 | Probar el **caso de lista vacía** (Consul ya desregistró notif-svc): debe caer al outbox, no a un 500 | ES | 23, 24 | Tras esperar el TTL real, `POST /appointments` → 201 y el breaker cuenta el fallo |
-| 27 | Trazabilidad: un mismo `correlation_id` visible en users-svc → booking-svc → notif-svc | AM | 5, 19 | `docker compose logs \| jq 'select(.correlation_id=="…")'` muestra el viaje completo |
-
-## Fase 7 — MCP Server (:8000)
-
-| # | Tarea | Asig. | Dep. | Done cuando |
-|---|---|---|---|---|
-| 28 | FastMCP con transporte streamable-http + `Dockerfile` + compose + registro en Consul | ES | 3, 4 | El contenedor expone el endpoint MCP en `:8000` |
-| 29 | Identidad del MCP: login con `DEMO_USER_EMAIL`/`DEMO_USER_PASSWORD` **desde `.env`**, cache del JWT y re-login ante 401 | ES | 11, 28 | Ninguna credencial en el código; `grep -r` no encuentra passwords |
-| 30 | Tools `get_available_slots`, `create_booking`, `cancel_booking` (destino resuelto por Consul) | AM | 15, 16, 17, 29 | Las 3 tools crean/cancelan filas reales en `booking_db` |
-| 31 | Tools `send_notification`, `get_notifications` (las usa el Notification Agent) | ES | 21, 29 | Una notificación creada desde MCP aparece en el historial |
-| 32 | Config de Claude Desktop (`docker exec -i … --stdio` y alternativa `mcp-remote`) documentada y probada | ES | 30, 31 | Desde Claude Desktop, *"¿qué horarios hay el viernes?"* devuelve datos reales |
-
-## Fase 8 — Agent-to-Agent (:9000–9002)
-
-| # | Tarea | Asig. | Dep. | Done cuando |
-|---|---|---|---|---|
-| 33 | `booking-agent` :9001 con `a2a-sdk`, Agent Card en `/.well-known/agent.json` **y** `/.well-known/agent-card.json`, skills ejecutadas vía MCP | AM | 3, 30 | La card valida y `create_booking` por A2A crea la cita |
-| 34 | `notification-agent` :9002, mismas dos rutas de card, skills `send_notification` / `get_history` vía MCP | AM | 3, 31 | Notificación enviada por delegación A2A |
-| 35 | `orchestrator` :9000: lee `AGENT_URLS`, **descarga las cards** y elige por `skills`; interpreta con la API de Claude y **cae a keywords** si no hay key o falla | AM | 33, 34 | *"Resérvame corte y barba el viernes y avísame"* → reserva + notificación, y también funciona sin `ANTHROPIC_API_KEY` |
-| 36 | Los 3 agentes en el compose + logs de la conversación A2A en JSON con `correlation_id` | AM | 35 | Los logs muestran la delegación agente → agente paso a paso |
-
-## Fase 9 — Documentación y demo
-
-| # | Tarea | Asig. | Dep. | Done cuando |
-|---|---|---|---|---|
-| 37 | README: diagrama ASCII, tabla de servicios/puertos, `clone → cp .env.example .env → docker compose up --build`, tabla de mapeo PDF → barbería | ES | 22 | Alguien que clona el repo levanta el sistema sin preguntar nada |
-| 38 | README: gestión de secretos + **rotación de credenciales sin downtime** (pasos concretos, probados) | ES | 10, 20 | La rotación se ejecuta de verdad sin que caiga ningún servicio |
-| 39 | README: sección **Agent-to-Agent** explicando la diferencia entre MCP y A2A (checkpoint de Task 5) | AM | 36 | La explicación usa el diagrama del flujo real del proyecto |
-| 40 | `demo.sh` con los 7 checkpoints del PDF en orden + guion de video escena por escena en `docs/` | ES | 26, 32, 36 | `./demo.sh` corre de punta a punta y sirve para grabar sin editar |
-
-## Fase 10 — Cloud (+15) y cierre
-
-| # | Tarea | Asig. | Dep. | Done cuando |
-|---|---|---|---|---|
-| 41 | Despliegue en Railway: definición de servicios, **secretos como Variables del proveedor (no `.env`)**, URLs públicas, captura de la UI de Consul en la nube y sección de despliegue paso a paso en el README | AM | 37 | Los servicios responden por URL pública y el compose local sigue funcionando |
-| 42 | `ENTREGA.md` con checklist de la rúbrica (110 + 15) y evidencias + auditoría final de secretos (`git log` sin `.env`, sin passwords en el historial) | AM | 40, 41 | Cada criterio del PDF tiene su fila, su estado y su evidencia enlazada |
+**Nota para Andre sobre la tarea 38:** el rol de aplicación de cada base lo crea el `init.sh` de su
+servicio a partir de `APP_DB_USER`/`APP_DB_PASSWORD`. La rotación consiste en crear un rol nuevo con
+los mismos grants, cambiar el `DATABASE_URL` del servicio, reiniciarlo con
+`docker compose up -d --no-deps <svc>` y recién entonces borrar el rol viejo.
 
 ---
 
+## Tareas de Estuardo (ES)
+
+### Terminadas
+Ver la tabla de estado arriba: 1, 2, 4, 5, 6, 7, 8, 9, 23 y el fix de bcrypt.
+
+### En curso — los tres servicios y la web
+| # | Tarea | Done cuando |
+|---|---|---|
+| 10–13 | **users-svc**: esquema + rol de menor privilegio, `/register`, `/login` (JWT), `/users/{id}`, salud, Consul, Dockerfile | Registro → login → token válido, y el servicio en verde en Consul |
+| 14–19 | **booking-svc**: esquema y semilla de barbería, catálogo, horarios, crear/consultar/cancelar cita, validación del usuario **por API** de users-svc, llamada a notif-svc con `shared/resilience.py` | Una cita se crea con JWT y notifica; cancelar libera el horario |
+| 20–22 | **notif-svc**: esquema, envío simulado con log estructurado, historial, salud, Consul, Dockerfile | El historial devuelve lo enviado y guarda el `correlation_id` |
+| 24, 25 | **Outbox + `/admin/circuit`**: con notif-svc caído la cita se crea igual y la notificación queda `pending`; un task reintenta cada 15s | 201 en vez de 500 con el servicio caído, y el outbox se vacía solo al volver |
+| 43–46 | **web-ui** (Next.js + TypeScript): BFF que descubre por Consul, registro/login, reservar, mis citas | El flujo completo funciona desde el navegador sin CORS ni URLs hardcodeadas |
+
+### Pendientes
+| # | Tarea | Dep. |
+|---|---|---|
+| 26 | Probar el caso de lista vacía (Consul ya desregistró notif-svc): 201 y no 500 | 24 |
+| 28 | MCP Server: FastMCP streamable-http + Dockerfile + compose + Consul | 3 |
+| 29 | Identidad del MCP: login con `DEMO_USER_*` desde `.env`, cache del JWT, re-login en 401 | 28 |
+| 30 | Tools `get_available_slots`, `create_booking`, `cancel_booking` | 29 |
+| 31 | Tools `send_notification`, `get_notifications` | 29 |
+| 32 | Config de Claude Desktop (`docker exec --stdio` y `mcp-remote`) probada | 30, 31 |
+| 37 | README: arquitectura, tabla de servicios, cómo correr, mapeo PDF → barbería | 22 |
+| 40 | `demo.sh` con los 7 checkpoints del PDF + guion de video | 26, 32, 36 |
+
+---
+
+## Hallazgos que corrigen el enunciado
+
+1. **El desregistro de Consul no tarda 30s.** Medido: **82.7s y 86.7s** desde que muere el `/healthz`.
+   Consul eleva los 30s a un mínimo de 1m sin avisar (solo un `[WARN]` en su log) y además barre los
+   checks muertos de forma periódica, así que el valor tiene *jitter*. La demo debe esperar ~90s.
+   Método y evidencia: `docs/consul-ttl.md`, reproducible con `scripts/medir_ttl_consul.py`.
+2. **Truncamiento silencioso de contraseñas** (corregido en el PR #8): recortar a 72 bytes antes de
+   bcrypt hacía que dos contraseñas con el mismo prefijo sirvieran indistintamente para entrar.
+   `POST /register` debe responder 422 ante una contraseña más larga.
+3. **`pybreaker.call_async` es inservible** en 1.4.1: está detrás de `tornado`, que no se instala.
+   La composición usa `breaker.calling()`.
+4. **Follow-up menor:** `shared/consul.py` sigue enviando `DEREGISTER_AFTER = "30s"`. Es inofensivo
+   —Consul lo eleva solo— pero engañoso al leer el código; cambiarlo a `"1m"` cabe en la tarea 26.
+
 ## Notas de ejecución
 
-- **El video lo graba el equipo.** La tarea 40 entrega el script y el guion; la grabación de pantalla es manual.
-- **La tarea 41 necesita cuenta de Railway** del equipo antes de poder ejecutarse.
-- **La tarea 35 funciona sin `ANTHROPIC_API_KEY`**: el orquestador cae a un parser por keywords, para que la
-  demo no dependa de la red ni de una API key.
-- Puertos internos = los del PDF (8001/8002/8003, 8000, 8500, 9000–9002). En el host son overridables porque
-  `8001` y `5432` ya están ocupados en la máquina de desarrollo.
+- **El video lo graba el equipo.** La tarea 40 entrega el script y el guion; la grabación es manual.
+- **La tarea 41 necesita cuenta de Railway** antes de poder ejecutarse.
+- **La tarea 35 funciona sin `ANTHROPIC_API_KEY`**: el orquestador cae a un parser por keywords, para
+  que la demo no dependa de la red ni de una API key.
+- Puertos internos = los del PDF. En el host son overridables (`.env`) porque en la máquina de
+  desarrollo `8001`, `5432` y `3000` ya están ocupados; por eso la web sale por defecto en `3080`.
