@@ -35,13 +35,20 @@ CREATE INDEX slots_free_idx ON slots (starts_at) WHERE NOT is_booked;
 CREATE TABLE appointments (
 	id           serial PRIMARY KEY,
 	user_id      int NOT NULL,  -- sin FK: vive en la base de otro servicio (ver cabecera)
-	slot_id      int NOT NULL UNIQUE REFERENCES slots(id),
+	slot_id      int NOT NULL REFERENCES slots(id),
 	status       text NOT NULL CHECK (status IN ('confirmed', 'cancelled')),
 	created_at   timestamptz NOT NULL DEFAULT now(),
 	cancelled_at timestamptz
 );
 
 CREATE INDEX appointments_user_idx ON appointments (user_id, created_at DESC);
+
+-- Único PARCIAL, no único a secas: lo que hay que impedir es que dos citas CONFIRMADAS
+-- compartan horario. Con un UNIQUE sobre la columna, la fila de una cita cancelada
+-- (que no se borra) bloquearía para siempre ese horario, y /slots lo seguiría
+-- ofreciendo: la web mostraría un horario libre que devuelve 409 al reservarlo.
+CREATE UNIQUE INDEX appointments_slot_confirmed_idx
+	ON appointments (slot_id) WHERE status = 'confirmed';
 
 CREATE TABLE outbox (
 	id             serial PRIMARY KEY,
