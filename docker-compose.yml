@@ -114,6 +114,8 @@ services:
     container_name: barberflow-users-svc
     build:
       context: .
+      args:
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
       dockerfile: services/users-svc/Dockerfile
     ports:
       - "${USERS_PORT:-8003}:8003"
@@ -153,6 +155,8 @@ services:
     container_name: barberflow-booking-svc
     build:
       context: .
+      args:
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
       dockerfile: services/booking-svc/Dockerfile
     ports:
       - "${BOOKING_PORT:-8001}:8001"
@@ -192,6 +196,8 @@ services:
     container_name: barberflow-notif-svc
     build:
       context: .
+      args:
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
       dockerfile: services/notif-svc/Dockerfile
     ports:
       - "${NOTIF_PORT:-8002}:8002"
