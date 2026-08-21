@@ -220,6 +220,8 @@ services:
   web-ui:
     build:
       context: ./web-ui
+      args:
+        NPM_STRICT_SSL: ${NPM_STRICT_SSL:-true}
     container_name: barberflow-web
     ports:
       - "${WEB_PORT:-3080}:3000"

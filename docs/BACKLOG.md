@@ -36,19 +36,45 @@ de la evidencia de la entrega.
 | 9 | `shared/resilience.py` — timeout, reintentos, breaker | ES | ✅ Hecho | [#7](https://github.com/Esaban17/barberflow-microservices/pull/7) |
 | — | Fix: truncamiento silencioso de contraseñas en bcrypt | ES | ✅ Hecho | [#8](https://github.com/Esaban17/barberflow-microservices/pull/8) |
 | — | Contrato de APIs (`docs/API.md`) + compose completo | ES | ✅ Hecho | commit directo |
-| 10–13 | **users-svc** completo | ES | 🔄 En curso | — |
-| 20–22 | **notif-svc** completo | ES | 🔄 En curso | — |
-| 14–19, 24, 25 | **booking-svc** completo + outbox + `/admin/circuit` | ES | 🔄 En curso | — |
-| 43–46 | **web-ui** (Next.js): BFF, auth, reservar, mis citas | ES | 🔄 En curso | — |
+| 10–13 | **users-svc** completo | ES | ✅ Hecho | [#9](https://github.com/Esaban17/barberflow-microservices/pull/9) |
+| 20–22 | **notif-svc** completo | ES | ✅ Hecho | [#10](https://github.com/Esaban17/barberflow-microservices/pull/10) |
+| 14–19, 24, 25 | **booking-svc** completo + outbox + `/admin/circuit` | ES | ✅ Hecho | [#11](https://github.com/Esaban17/barberflow-microservices/pull/11) |
+| 43–46 | **web-ui** (Next.js): BFF, auth, reservar, mis citas | ES | ✅ Hecho | [#12](https://github.com/Esaban17/barberflow-microservices/pull/12) |
+| — | Fix: build tras proxy que intercepta TLS (`PIP_TRUSTED_HOST`, `NPM_STRICT_SSL`) | ES | ✅ Hecho | commit directo |
+| 26 | Caso de lista vacía en Consul: 201 y no 500 | ES | ✅ Hecho | verificado en el sistema real |
 
 > La tarea 1 la hizo Estuardo dentro del commit inicial: toda tarea de ES dependía de ella y sin el
 > scaffold no había dónde abrir un PR. **No hay que rehacerla.**
 
-## Objetivo inmediato
+## Objetivo inmediato — ✅ cumplido el 21 de agosto de 2026
 
-Levantar el sistema en local con `docker compose up --build`: los **tres microservicios registrados y
-en verde en Consul** (`localhost:8500`) y la **app web** consumiéndolos. Es lo que están construyendo
-las cuatro tareas en curso.
+El sistema levanta en local con `docker compose up --build`: los **tres microservicios registrados y
+en verde en Consul** (`localhost:8500`) y la **app web** consumiéndolos por su BFF.
+
+Verificado de punta a punta sobre el sistema real:
+
+| Comprobación | Resultado |
+|---|---|
+| 8 contenedores arriba (3 svc + 3 BD + Consul + web) | ✅ |
+| `users-svc`, `booking-svc` y `notif-svc` en verde en Consul | ✅ `docs/evidencias/02-consul-3-servicios.png` |
+| Registro → login con JWT → reservar → notificación | ✅ |
+| booking-svc valida el usuario **por la API** de users-svc, nunca por su BD | ✅ |
+| Un mismo `correlation_id` visible en los tres servicios | ✅ |
+| `notif-svc` caído: 3 reservas → **201** con `notification: pending`, ningún 500 | ✅ |
+| Circuit breaker `open` → `closed` y outbox vaciado solo al volver el servicio | ✅ |
+| La web consume todo por su BFF, que descubre los servicios en Consul | ✅ `docs/evidencias/01-web-inicio.png` |
+
+**Cómo levantarlo**
+
+```bash
+cp .env.example .env          # completar los valores
+docker compose up --build     # http://localhost:3080  ·  Consul en :8500
+```
+
+En esta máquina el puerto 8001 está ocupado por otro contenedor y el 3000 por otro frontend: por eso
+el `.env` local usa `BOOKING_PORT=8011` y la web sale en `3080`. Si tu red intercepta TLS (Zscaler y
+similares), descomenta `PIP_TRUSTED_HOST` y `NPM_STRICT_SSL` en el `.env` o el build de las imágenes
+falla con `CERTIFICATE_VERIFY_FAILED`.
 
 ### Cobertura de la rúbrica
 

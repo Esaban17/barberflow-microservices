@@ -6,8 +6,11 @@
 FROM node:24-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
+# Permite construir tras un proxy que intercepta TLS (p. ej. Zscaler): por defecto
+# la verificación queda activa; se relaja con --build-arg NPM_STRICT_SSL=false.
+ARG NPM_STRICT_SSL=true
 # `npm ci` respeta el lockfile: el build es reproducible.
-RUN npm ci
+RUN npm config set strict-ssl ${NPM_STRICT_SSL} && npm ci
 
 FROM node:24-alpine AS builder
 WORKDIR /app
