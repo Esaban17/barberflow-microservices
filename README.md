@@ -122,6 +122,73 @@ instancias sanas", ningún llamador la nota. Eso es lo que pide el "Done cuando"
 de la tarea 38: no que una instancia individual nunca tenga un blip, sino que
 ningún servicio de BarberFlow se caiga por la rotación.
 
+## Agent-to-Agent: MCP vs. A2A (tarea 39)
+
+BarberFlow usa dos protocolos distintos para IA, y no son intercambiables:
+resuelven problemas distintos.
+
+- **MCP (Model Context Protocol)** — `barberflow-mcp` (puerto 8000) — conecta un
+  modelo/cliente de IA (Claude Desktop, el propio `orchestrator`) con
+  **herramientas**: funciones puntuales con un esquema de entrada/salida
+  (`get_available_slots`, `create_booking`, `cancel_booking`, `send_notification`,
+  `get_notifications`). Es una relación **cliente ↔ servidor de herramientas**:
+  quien habla MCP no tiene "personalidad" ni mantiene una conversación, solo
+  expone o invoca funciones.
+- **A2A (Agent2Agent)** — `booking-agent` (9001), `notification-agent` (9002) y
+  el `orchestrator` (9000) — conecta **agentes** entre sí: cada uno publica una
+  *Agent Card* (`/.well-known/agent-card.json`) que anuncia sus *skills* en
+  lenguaje natural, y se les habla con un mensaje de texto libre
+  (`message/send`), no con una llamada a función tipada. Es una relación
+  **agente ↔ agente**: el `orchestrator` no sabe qué hace `create_booking` por
+  dentro, solo sabe que `booking-agent` tiene la skill `create_booking` y le
+  delega el mensaje completo.
+
+En BarberFlow un agente A2A **es un cliente de MCP**: `booking-agent` y
+`notification-agent` no hablan directo con `booking-svc`/`notif-svc` — traducen
+el mensaje en lenguaje natural que reciben por A2A a una llamada a una tool de
+`barberflow-mcp` (`shared/mcp_client.call_tool`), y esa tool es la que finalmente
+llama al microservicio de negocio vía `shared.resilience.call_service`. MCP es
+la capa de "acción sobre el sistema"; A2A es la capa de "delegación entre
+agentes que deciden qué acción tomar".
+
+### Flujo real de un mensaje
+
+```mermaid
+sequenceDiagram
+    actor U as Usuario
+    participant O as orchestrator :9000
+    participant BA as booking-agent :9001<br/>(A2A)
+    participant NA as notification-agent :9002<br/>(A2A)
+    participant MCP as barberflow-mcp :8000<br/>(MCP)
+    participant BS as booking-svc :8001
+    participant NS as notif-svc :8002
+
+    U->>O: POST /instruct<br/>"Resérvame corte y barba el viernes y avísame"
+    Note over O: build_plan(): API de Claude (o keywords si no hay<br/>ANTHROPIC_API_KEY) -> ["create_booking", "send_notification"]
+    O->>O: discover_agents()<br/>lee AGENT_URLS, baja las Agent Cards,<br/>empareja skill -> agente
+    O->>BA: A2A message/send<br/>"...corte y barba el viernes..."
+    BA->>MCP: MCP tools/call get_available_slots
+    MCP->>BS: GET /slots (call_service)
+    BS-->>MCP: horarios disponibles
+    MCP-->>BA: slots (JSON)
+    BA->>MCP: MCP tools/call create_booking
+    MCP->>BS: POST /appointments (call_service)
+    BS-->>MCP: cita creada
+    MCP-->>BA: resultado
+    BA-->>O: A2A response: "cita creada para el viernes..."
+    O->>NA: A2A message/send<br/>"...avísame. Resultado de la reserva: cita creada..."
+    NA->>MCP: MCP tools/call send_notification
+    MCP->>NS: POST /notifications (call_service)
+    NS-->>MCP: notificación registrada
+    MCP-->>NA: resultado
+    NA-->>O: A2A response: "notificación enviada"
+    O-->>U: {"plan": [...], "steps": [...]}
+```
+
+El mismo `x-correlation-id` viaja por las tres capas (A2A, MCP y las llamadas
+HTTP internas entre microservicios) — ver [`docs/correlation-id-trace.md`](docs/correlation-id-trace.md)
+para una traza real capturada de este flujo con un solo `correlation_id` visible
+en los logs de los 6 servicios.
+
 _El resto de este README (arquitectura completa, tabla de servicios, mapeo PDF →
-barbería) se completa en la tarea 37 del backlog, a cargo de Estuardo. La sección
-Agent-to-Agent (tarea 39) sigue en la rama `docs/a2a-vs-mcp`._
+barbería) se completa en la tarea 37 del backlog, a cargo de Estuardo._
