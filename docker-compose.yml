@@ -244,6 +244,79 @@ services:
       notif-svc:
         condition: service_started
 
+  # ── red de agentes A2A (tareas 33-36) ───────────────────────────────────────
+  # booking-agent y notification-agent exponen sus skills vía barberflow-mcp
+  # (nunca hablan directo con users-svc/booking-svc/notif-svc); el orchestrator
+  # descubre a los dos por su Agent Card (AGENT_URLS) y elige por skill, sin
+  # pasar por Consul: los agentes A2A no son parte del contrato REST de
+  # docs/API.md.
+  booking-agent:
+    <<: *svc-common
+    container_name: barberflow-booking-agent
+    build:
+      context: .
+      args:
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
+      dockerfile: services/booking-agent/Dockerfile
+    ports:
+      - "${BOOKING_AGENT_PORT:-9001}:9001"
+    environment:
+      <<: *svc-env
+      SERVICE_NAME: booking-agent
+      SERVICE_ADDRESS: booking-agent
+      SERVICE_PORT: 9001
+    depends_on:
+      consul:
+        condition: service_healthy
+      barberflow-mcp:
+        condition: service_started
+
+  notification-agent:
+    <<: *svc-common
+    container_name: barberflow-notification-agent
+    build:
+      context: .
+      args:
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
+      dockerfile: services/notification-agent/Dockerfile
+    ports:
+      - "${NOTIFICATION_AGENT_PORT:-9002}:9002"
+    environment:
+      <<: *svc-env
+      SERVICE_NAME: notification-agent
+      SERVICE_ADDRESS: notification-agent
+      SERVICE_PORT: 9002
+    depends_on:
+      consul:
+        condition: service_healthy
+      barberflow-mcp:
+        condition: service_started
+
+  orchestrator:
+    <<: *svc-common
+    container_name: barberflow-orchestrator
+    build:
+      context: .
+      args:
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
+      dockerfile: services/orchestrator/Dockerfile
+    ports:
+      - "${ORCHESTRATOR_PORT:-9000}:9000"
+    environment:
+      <<: *svc-env
+      SERVICE_NAME: orchestrator
+      SERVICE_ADDRESS: orchestrator
+      SERVICE_PORT: 9000
+      AGENT_URLS: "http://booking-agent:9001,http://notification-agent:9002"
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    depends_on:
+      consul:
+        condition: service_healthy
+      booking-agent:
+        condition: service_started
+      notification-agent:
+        condition: service_started
+
   # ── web-ui :3000 (Next.js) ─────────────────────────────────────────────────
   # El navegador solo habla con Next; sus route handlers hacen de BFF y resuelven
   # a qué servicio llamar preguntándole a Consul. Así no hay CORS ni URLs de
