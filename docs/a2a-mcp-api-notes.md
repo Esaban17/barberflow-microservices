@@ -88,14 +88,22 @@ clases generadas por protobuf (`a2a.types.a2a_pb2`), reexportadas desde
 `a2a.types`. Se construyen con kwargs igual que un modelo normal:
 
 ```python
-from a2a.types import AgentCard, AgentSkill, AgentCapabilities
+from a2a.types import AgentCard, AgentSkill, AgentCapabilities, AgentInterface
+from a2a.utils.constants import TransportProtocol
 
 card = AgentCard(
     name="booking-agent",
     description="Agenda citas de BarberFlow",
-    url="http://booking-agent:9001",
     version="1.0.0",
     capabilities=AgentCapabilities(streaming=False),
+    # OJO: `AgentCard` NO tiene un campo `url` directo (a diferencia de otras
+    # versiones/documentación del protocolo) — probarlo con un kwarg `url=`
+    # revienta con "Protocol message AgentCard has no 'url' field". La URL va
+    # dentro de `supported_interfaces`, una lista de `AgentInterface`, porque
+    # un agente puede exponer más de un transporte (JSON-RPC, REST, gRPC).
+    supported_interfaces=[
+        AgentInterface(url="http://booking-agent:9001", protocol_binding=TransportProtocol.JSONRPC),
+    ],
     skills=[
         AgentSkill(id="create_booking", name="create_booking",
                     description="Crea una cita", tags=["booking"]),
@@ -104,7 +112,9 @@ card = AgentCard(
 ```
 
 Como son mensajes protobuf, `inspect.signature()` no funciona sobre ellos
-(por eso hay que leer el `.proto` o probar los kwargs directamente).
+(por eso hay que leer el `.proto` o probar los kwargs directamente — así se
+encontró el error de `url` de arriba: la primera versión de esta nota lo
+daba por hecho de memoria y no arrancaba).
 
 ### Ruta de la Agent Card
 
