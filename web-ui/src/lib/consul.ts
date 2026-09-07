@@ -31,7 +31,48 @@ export class ServiceUnavailable extends Error {
 type ConsulHealthEntry = {
   Node: { Address: string };
   Service: { Address?: string; Port: number };
+  Checks?: { Status: string }[];
 };
+
+export type ServiceStatus = {
+  name: string;
+  /** true si al menos una instancia registrada tiene todos sus checks en "passing". */
+  healthy: boolean;
+  /** cuántas instancias hay registradas en total (sanas o no) — 0 si nunca se registró. */
+  instances: number;
+  /** cuántas de esas instancias están sanas ahora mismo. */
+  healthyInstances: number;
+};
+
+/**
+ * Estado de un servicio para el panel de la tarea 47: a diferencia de `discover()`,
+ * esta nunca lanza — una lista vacía o Consul caído son un resultado válido más
+ * (`healthy: false`), porque el panel tiene que poder DIBUJAR el rojo, no solo
+ * fallar al pedir los datos.
+ */
+export async function serviceStatus(service: string): Promise<ServiceStatus> {
+  try {
+    const response = await fetch(`${consulAddress()}/v1/health/service/${service}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(CONSUL_TIMEOUT_MS),
+    });
+    if (!response.ok) throw new Error(`Consul respondió ${response.status}`);
+    const instances = (await response.json()) as ConsulHealthEntry[];
+    const healthyInstances = instances.filter(
+      (entry) => (entry.Checks ?? []).every((check) => check.Status === "passing"),
+    ).length;
+    return {
+      name: service,
+      healthy: healthyInstances > 0,
+      instances: instances.length,
+      healthyInstances,
+    };
+  } catch {
+    // Consul mismo no respondió: mismo resultado que "no hay ninguna instancia sana",
+    // que es exactamente lo que le pasaría a cualquier llamador real en ese momento.
+    return { name: service, healthy: false, instances: 0, healthyInstances: 0 };
+  }
+}
 
 /** Base URL ("http://host:puerto") de una instancia sana del servicio. */
 export async function discover(service: string): Promise<string> {
