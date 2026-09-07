@@ -213,6 +213,37 @@ services:
       notif-db:
         condition: service_healthy
 
+  # ── barberflow-mcp :8000 ───────────────────────────────────────────────────
+  # Sin BD propia: es un cliente más de users-svc/booking-svc/notif-svc por su
+  # API (tareas 28-31). Opera con la identidad del usuario demo sembrado en
+  # users-svc/db/01-init.sql (mismo email/password que DEMO_USER_*).
+  barberflow-mcp:
+    <<: *svc-common
+    container_name: barberflow-mcp
+    build:
+      context: .
+      args:
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
+      dockerfile: services/mcp-server/Dockerfile
+    ports:
+      - "${MCP_PORT:-8000}:8000"
+    environment:
+      <<: *svc-env
+      SERVICE_NAME: barberflow-mcp
+      SERVICE_ADDRESS: barberflow-mcp
+      SERVICE_PORT: 8000
+      DEMO_USER_EMAIL: ${DEMO_USER_EMAIL}
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD}
+    depends_on:
+      consul:
+        condition: service_healthy
+      users-svc:
+        condition: service_started
+      booking-svc:
+        condition: service_started
+      notif-svc:
+        condition: service_started
+
   # ── web-ui :3000 (Next.js) ─────────────────────────────────────────────────
   # El navegador solo habla con Next; sus route handlers hacen de BFF y resuelven
   # a qué servicio llamar preguntándole a Consul. Así no hay CORS ni URLs de
