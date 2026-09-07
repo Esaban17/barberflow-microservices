@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/", label: "Inicio" },
   { href: "/book", label: "Reservar" },
   { href: "/appointments", label: "Mis citas" },
+  { href: "/status", label: "Estado" },
 ] as const;
 
 export function SiteHeader() {
