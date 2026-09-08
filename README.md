@@ -151,6 +151,18 @@ llama al microservicio de negocio vía `shared.resilience.call_service`. MCP es
 la capa de "acción sobre el sistema"; A2A es la capa de "delegación entre
 agentes que deciden qué acción tomar".
 
+### Demo en video (`video_DEMO_mcp.mp4`)
+
+Grabación de ejemplo de una llamada real a `barberflow-mcp` a través de Claude:
+desde el cliente de IA (Claude Desktop/Cowork conectado como cliente MCP) se
+invocan las tools `get_available_slots` y `create_booking` expuestas por
+`barberflow-mcp` (puerto 8000), igual que las usa `booking-agent` en el flujo
+A2A de abajo, pero aquí llamadas directo por Claude como cliente de herramientas.
+
+> El archivo pesa ~68 MB (por encima del límite de 100 MB de GitHub para el
+> historial, pero pesado igual) y está en `.gitignore`, así que no vive en el
+> repo remoto — pídelo aparte si lo necesitas.
+
 ### Flujo real de un mensaje
 
 ```mermaid
