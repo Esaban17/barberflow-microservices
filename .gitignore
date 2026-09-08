@@ -17,4 +17,4 @@ venv/
 .playwright-mcp/
 
 # Video demo (muy pesado para git)
-video_DEMO_mcp.mp4
+#video_DEMO_mcp.mp4
