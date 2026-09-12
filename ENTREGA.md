@@ -78,7 +78,8 @@ contra Postgres real (no simulados):
 
 ## 4. Auditoría de secretos en el historial de git
 
-Ejecutada contra el repo real, sobre **todas** las ramas (`git log --all`), no solo `main`:
+Ejecutada contra el repo real, sobre **todas** las ramas (`git log --all`), no solo `main`.
+El barrido con gitleaks es el del 7 de septiembre de 2026, sobre las 43 commits de esa fecha:
 
 ```
 $ gitleaks detect --source . --log-opts="--all" --report-format json \
@@ -92,15 +93,16 @@ $ gitleaks detect --source . --log-opts="--all" --report-format json \
 `gitleaks_report.json` resultante: `[]` (lista vacía, guardado en
 `docs/evidencias/gitleaks-report.json`).
 
-Como segunda pasada, manual y específica a las variables de este proyecto:
+La segunda pasada —manual y específica a las variables de este proyecto— se volvió a correr
+hoy, ya sobre las 57 commits del historial completo:
 
 ```
 $ git log -p --all -- '*.env' '*.env.*' \
     | grep -E "^\+.*(PASSWORD|SECRET|API_KEY)=" \
     | grep -viE "=cambiar\s*$|=\s*$"
 
-+JWT_SECRET=cambiar-por-un-secreto-largo-y-aleatorio
 +DEMO_USER_PASSWORD=demo1234
++JWT_SECRET=cambiar-por-un-secreto-largo-y-aleatorio
 ```
 
 Las dos líneas son de `.env.example` y ninguna es un secreto:
