@@ -42,6 +42,16 @@ de la evidencia de la entrega.
 | 43–46 | **web-ui** (Next.js): BFF, auth, reservar, mis citas | ES | ✅ Hecho | [#12](https://github.com/Esaban17/barberflow-microservices/pull/12) |
 | — | Fix: build tras proxy que intercepta TLS (`PIP_TRUSTED_HOST`, `NPM_STRICT_SSL`) | ES | ✅ Hecho | commit directo |
 | 26 | Caso de lista vacía en Consul: 201 y no 500 | ES | ✅ Hecho | verificado en el sistema real |
+| 3 | API real de `a2a-sdk` y `mcp` anotada en `docs/` | AM | ✅ Hecho | [#13](https://github.com/Esaban17/barberflow-microservices/pull/13) |
+| 28–31 | **barberflow-mcp**: `MCPServer` streamable-http, identidad demo y las 5 tools | ES | ✅ Hecho | [#14](https://github.com/Esaban17/barberflow-microservices/pull/14) |
+| 33–36 | **red A2A**: `booking-agent`, `notification-agent`, `orchestrator` + compose | AM | ✅ Hecho | [#15](https://github.com/Esaban17/barberflow-microservices/pull/15) |
+| 38 | README: gestión de secretos + rotación sin downtime (medida) | AM | ✅ Hecho | [#16](https://github.com/Esaban17/barberflow-microservices/pull/16) |
+| 39 | README: sección Agent-to-Agent, MCP vs. A2A | AM | ✅ Hecho | [#17](https://github.com/Esaban17/barberflow-microservices/pull/17) |
+| 41 | Guía de despliegue en Railway (`docs/railway-deploy.md`) | AM | ⚠️ Guía lista, **despliegue real pendiente** | [#18](https://github.com/Esaban17/barberflow-microservices/pull/18) |
+| 47 | Panel de estado `/status`: Consul + circuit breaker | AM | ✅ Hecho | [#19](https://github.com/Esaban17/barberflow-microservices/pull/19) |
+| 42 | `ENTREGA.md` con la rúbrica y la auditoría de secretos | AM | ✅ Hecho | [#20](https://github.com/Esaban17/barberflow-microservices/pull/20) |
+| 27 | Trazabilidad del `correlation_id` entre los tres servicios | AM | ✅ Hecho | `docs/correlation-id-trace.md` |
+| 32, 37, 40 | Claude Desktop probado, README con arquitectura y `scripts/demo.sh` | ES | ✅ Hecho | [#21](https://github.com/Esaban17/barberflow-microservices/pull/21) |
 
 > La tarea 1 la hizo Estuardo dentro del commit inicial: toda tarea de ES dependía de ella y sin el
 > scaffold no había dónde abrir un PR. **No hay que rehacerla.**
@@ -141,16 +151,16 @@ Ver la tabla de estado arriba: 1, 2, 4, 5, 6, 7, 8, 9, 23 y el fix de bcrypt.
 | 43–46 | **web-ui** (Next.js + TypeScript): BFF que descubre por Consul, registro/login, reservar, mis citas | El flujo completo funciona desde el navegador sin CORS ni URLs hardcodeadas |
 
 ### Pendientes
-| # | Tarea | Dep. |
-|---|---|---|
-| 26 | Probar el caso de lista vacía (Consul ya desregistró notif-svc): 201 y no 500 | 24 |
-| 28 | MCP Server: FastMCP streamable-http + Dockerfile + compose + Consul | 3 |
-| 29 | Identidad del MCP: login con `DEMO_USER_*` desde `.env`, cache del JWT, re-login en 401 | 28 |
-| 30 | Tools `get_available_slots`, `create_booking`, `cancel_booking` | 29 |
-| 31 | Tools `send_notification`, `get_notifications` | 29 |
-| 32 | Config de Claude Desktop (`docker exec --stdio` y `mcp-remote`) probada | 30, 31 |
-| 37 | README: arquitectura, tabla de servicios, cómo correr, mapeo PDF → barbería | 22 |
-| 40 | `demo.sh` con los 7 checkpoints del PDF + guion de video | 26, 32, 36 |
+
+Ninguna. Las últimas tres (32, 37 y 40) cerraron en la rama de entrega final:
+
+- **32** — `mcp-remote` conectado a Claude Desktop y las tools ejercitadas por el protocolo
+  (`initialize` → `tools/list` → `tools/call`) contra los contenedores.
+- **37** — README con diagrama de arquitectura, tabla de componentes con sus puertos del host,
+  cómo correr, verificación rápida y el mapeo enunciado → barbería.
+- **40** — `scripts/demo.sh` recorre los 7 checkpoints y deja el sistema como lo encontró. El
+  guion de video se descartó: el video ya está grabado (`video_DEMO_mcp.mp4`), así que no tenía
+  quién lo consuma.
 
 ---
 
@@ -165,12 +175,16 @@ Ver la tabla de estado arriba: 1, 2, 4, 5, 6, 7, 8, 9, 23 y el fix de bcrypt.
    `POST /register` debe responder 422 ante una contraseña más larga.
 3. **`pybreaker.call_async` es inservible** en 1.4.1: está detrás de `tornado`, que no se instala.
    La composición usa `breaker.calling()`.
-4. **Follow-up menor:** `shared/consul.py` sigue enviando `DEREGISTER_AFTER = "30s"`. Es inofensivo
-   —Consul lo eleva solo— pero engañoso al leer el código; cambiarlo a `"1m"` cabe en la tarea 26.
+4. **`DEREGISTER_AFTER = "30s"` se queda en 30s (decidido).** Se evaluó subirlo a `"1m"` para que el
+   código dijera lo que Consul hace de verdad, y se descartó: el valor que el enunciado pide es 30s,
+   Consul lo eleva solo, y toda la evidencia medida en `docs/consul-ttl.md` (82.7s y 86.7s) se tomó
+   enviando 30s — cambiarlo dejaría el número documentado sin respaldo. El comentario de
+   `shared/consul.py:19` ya explica la diferencia; ahí está la advertencia, no en el valor.
 
 ## Notas de ejecución
 
-- **El video lo graba el equipo.** La tarea 40 entrega el script y el guion; la grabación es manual.
+- **El video ya está grabado** (`video_DEMO_mcp.mp4`, versionado en el repo). La tarea 40 entregó
+  `scripts/demo.sh`, que recorre los mismos 7 checkpoints sin depender de la grabación.
 - **La tarea 41 necesita cuenta de Railway** antes de poder ejecutarse.
 - **La tarea 35 funciona sin `ANTHROPIC_API_KEY`**: el orquestador cae a un parser por keywords, para
   que la demo no dependa de la red ni de una API key.
