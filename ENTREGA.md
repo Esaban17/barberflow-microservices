@@ -1,9 +1,12 @@
 # ENTREGA — BarberFlow (tarea 42)
 
 Checklist de la rúbrica del curso (`proyecto-FitFlow_Proyecto_Mejorado.pdf`, dominio
-adaptado a barbería) con su estado real y su evidencia. Última actualización: **14 de
-septiembre de 2026**, tras verificar el stack completo con Docker real en la laptop
-del equipo.
+adaptado a barbería) con su estado real y su evidencia. Fecha de este corte:
+**11 de septiembre de 2026**.
+
+Todo el trabajo está mergeado a `main` (PRs #1–#21) y el sistema completo —12 contenedores—
+se levantó y se verificó en local en esta fecha. Lo único que no está ejecutado es el
+despliegue en la nube de los puntos extra: ver la sección 5.
 
 ---
 
@@ -11,37 +14,66 @@ del equipo.
 
 | Criterio | Pts | Estado | Evidencia |
 |---|---|---|---|
-| Los 3 servicios corren con `docker compose up` y tienen DB propia | 20 | ✅ | Stack completo (12 servicios) verificado arriba con `docker compose up --build` real — `docker compose ps` muestra las 3 BD `(healthy)` y los 3 servicios `Up`; database-per-service en `services/{users,booking,notif}-svc/db/01-init.sql` (sin FKs cruzadas entre bases) |
-| Los servicios se registran en Consul y se descubren dinámicamente | 20 | ✅ | `docs/evidencias/02-consul-3-servicios.png`; `shared/consul.py`; `docs/consul-ttl.md` (TTL real medido: 82.7s/86.7s, no los 30s que dice el PDF) |
-| MCP Server funciona: Claude puede crear una reserva | 20 | ✅ **verificado desde Claude Desktop real** | `services/mcp-server/main.py` (PR [#14](https://github.com/Esaban17/barberflow-microservices/pull/14), tareas 28–31); config real en `claude_desktop_config.json` (`mcp-remote` + Node vía ruta absoluta `npx.cmd`, necesario porque la app empaqueta su propio `PATH`); probado end-to-end contra el stack en Docker: `get_available_slots` devolvió horarios reales, `create_booking` creó la cita `id:3` con `notification:"sent"`, `get_notifications` la mostró en el historial. Video corto grabado (`docs/evidencias/videoDEMOmcp.mp4` — excede el límite de GitHub, descrito en el commit `a17b244`) |
-| Circuit breaker demostrado: notif-svc cae, el sistema sigue | 20 | ✅ | `GET /admin/circuit` en `services/booking-svc/main.py` (tarea 25, ya en `main`); panel visual en vivo `/status` de la web-ui (PR [#19](https://github.com/Esaban17/barberflow-microservices/pull/19), tarea 47) — probado end-to-end: 3 reservas con notif-svc caído → 201 igual, breaker abre (`state: open, fail_counter: 3, outbox_pending: 3`), y cierra solo al volver el servicio (`outbox_pending: 0`) |
-| JWT implementado + secretos fuera del código | 10 | ✅ | `shared/auth.py` (ya en `main`); gestión de secretos y rotación de credenciales sin downtime, con dos procedimientos medidos de verdad (PR [#16](https://github.com/Esaban17/barberflow-microservices/pull/16), tarea 38 — ver sección 3); auditoría de secretos en el historial de git en la sección 4 de este documento |
-| Agent-to-Agent | 20 | ✅ | `services/{booking,notification}-agent/main.py` + `services/orchestrator/main.py` (PR [#15](https://github.com/Esaban17/barberflow-microservices/pull/15), tareas 33–36) — corriendo como contenedores reales (`barberflow-booking-agent`, `barberflow-notification-agent`, `barberflow-orchestrator` en `docker compose ps`); sección "Agent-to-Agent: MCP vs. A2A" del README con diagrama Mermaid del flujo real (PR [#17](https://github.com/Esaban17/barberflow-microservices/pull/17), tarea 39) |
-| **Extra** — despliegue cloud | +15 | ⚠️ Config y guía completas; despliegue real pendiente | `docs/railway-deploy.md` (PR [#18](https://github.com/Esaban17/barberflow-microservices/pull/18), tarea 41) — ver sección 5 |
-| _Fuera del PDF, pedido por el equipo_ — app web | — | ✅ | `web-ui/` (tareas 43–46, ya en `main`) + panel de estado (tarea 47), corriendo en `http://localhost:3080` |
+| Los 3 servicios corren con `docker compose up` y tienen DB propia | 20 | ✅ | `docker-compose.yml`; `docs/evidencias/01-web-inicio.png`; database-per-service en `services/{users,booking,notif}-svc/db/01-init.sql` (sin FKs cruzadas entre bases) |
+| Los servicios se registran en Consul y se descubren dinámicamente | 20 | ✅ | `docs/evidencias/02-consul-3-servicios.png`; `shared/consul.py`; `docs/consul-ttl.md` (TTL real medido: 82.7s/86.7s, no los 30s que dice el PDF); paso 1 de `scripts/demo.sh` |
+| MCP Server funciona: Claude puede crear una reserva | 20 | ✅ | `services/mcp-server/main.py` (tareas 28–31); `video_DEMO_mcp.mp4` (llamada real desde Claude); config de Claude Desktop probada con `mcp-remote` (tarea 32, `docs/a2a-mcp-api-notes.md`); pasos 6 y 7 de `scripts/demo.sh`, que ejercitan `initialize → tools/list → tools/call` contra el contenedor y comprueban la cita en `booking-db` |
+| Circuit breaker demostrado: notif-svc cae, el sistema sigue | 20 | ✅ | `GET /admin/circuit` en `services/booking-svc/main.py` (tareas 24, 25); panel `/status` de la web (tarea 47) con sus dos capturas: `docs/evidencias/03-status-breaker-abierto.png` y `04-status-todo-verde.png`; pasos 4 y 5 de `scripts/demo.sh`: 3 reservas con notif-svc caído → 201 con `notification: pending`, breaker `open` con `fail_counter: 3` y `outbox_pending: 3`, y cierre solo al volver el servicio (`closed`, `outbox_pending: 0`) |
+| JWT implementado + secretos fuera del código | 10 | ✅ | `shared/auth.py`; JWT con `sub`/`email`/`role` y 401 verificado en el paso 2 de `scripts/demo.sh`; `user_id` junto al `correlation_id` en los logs (paso 3); gestión de secretos y rotación sin downtime con dos procedimientos medidos (README, tarea 38 — ver sección 3); auditoría de secretos del historial en la sección 4 |
+| Agent-to-Agent | 20 | ✅ | `services/{booking,notification}-agent/main.py` + `services/orchestrator/main.py` (tareas 33–36); Agent Card en `/.well-known/agent.json` **y** `/.well-known/agent-card.json` (ambas responden 200); sección "Agent-to-Agent: MCP vs. A2A" del README con el diagrama del flujo real (tarea 39) |
+| **Extra** — despliegue cloud | +15 | ⚠️ Guía completa (+3); URL pública y secretos del proveedor (+12) **pendientes** | `docs/railway-deploy.md` (tarea 41) — ver sección 5 |
+| _Fuera del PDF, pedido por el equipo_ — app web | — | ✅ | `web-ui/` (tareas 43–46) + panel de estado (tarea 47) |
 
-**Total con lo verificado hasta hoy: 110/110 + config lista de los +15 extra (ejecución
-real en Railway pendiente, ver sección 5).**
+**Total verificado: 110/110, más los +3 de la guía de despliegue. Los +12 restantes dependen
+de ejecutar el despliegue (sección 5).**
 
-**Entregable final del PDF** ("Repositorio GitHub + README + video demo de 5–8 min"):
-repo y README completos; el video de 5–8 min cubriendo TODO el checklist (no solo el
-demo de MCP que ya existe) todavía no está grabado — ver sección 5.
+### Verificación del 11 de septiembre de 2026
 
-## 2. Estado de las ramas y PRs
+Sobre el sistema levantado con `docker compose up --build` (12 contenedores):
 
-Todas las ramas de Andre (AM) están subidas, con PR abierto y **mergeadas a `main`**:
+| Comprobación | Resultado |
+|---|---|
+| `./scripts/demo.sh` — los 7 checkpoints del PDF de corrido | ✅ pasa y deja el sistema como lo encontró |
+| `users-svc`, `booking-svc`, `notif-svc` y `barberflow-mcp` en verde en Consul | ✅ |
+| Registro → login → JWT → reserva con el mismo `correlation_id` en booking-svc y notif-svc | ✅ |
+| 3 reservas con `notif-svc` detenido → 201 y `notification: pending` | ✅ breaker `open`, `fail_counter: 3`, `outbox_pending: 3` |
+| `notif-svc` de vuelta → breaker `closed` y outbox vaciado sin intervención | ✅ las notificaciones encoladas llegaron a notif-svc |
+| MCP por protocolo: `tools/list` (5 tools) → `get_available_slots` → `create_booking` → cita confirmada en `booking-db` → `cancel_booking` | ✅ |
+| A2A en Docker: `POST /instruct` "Resérvame un corte… y avísame" | ✅ `plan_source: keywords` (sin `ANTHROPIC_API_KEY`), delegó en booking-agent (cita creada) y notification-agent (notificación enviada) |
+| Claude Desktop conectado al MCP con `mcp-remote` | ✅ handshake y `tools/list` verificados por el puente |
 
-| Rama | Tarea(s) | PR |
+### Verificación adicional — 14 de septiembre de 2026
+
+Repetida en vivo, contra Claude Desktop real (no un cliente de protocolo), tras resolver un
+problema de configuración (la app empaqueta su propio `PATH` y no encuentra `npx` por nombre;
+hubo que apuntar `command` a la ruta absoluta `C:\Program Files\nodejs\npx.cmd`):
+
+- `get_available_slots` → devolvió horarios reales del día (`booking-db`, vía Consul).
+- `create_booking(slot_id=55)` → cita `id: 3` creada, `notification: "sent"` (notif-svc
+  arriba en ese momento).
+- `get_notifications(user_id=1)` → la notificación de esa cita aparece en el historial.
+- `docker compose ps` → los 12 contenedores `Up`, las 3 bases `(healthy)`.
+
+## 2. Estado de las ramas y PRs (tarea 42 lo pide explícitamente)
+
+Todo mergeado a `main`. Un PR por tarea o grupo de tareas:
+
+| PR | Tarea(s) | Qué entrega |
 |---|---|---|
-| `feat/booking-svc`, `feat/notif-svc`, `feat/users-svc`, `feat/web-svc`, `feat/task-04-compose-base`, `feat/task-05-logging`, `feat/task-06-db`, `feat/task-07-auth`, `feat/task-08-consul`, `feat/task-09-resilience`, `feat/task-23-consul-ttl` | 1, 2, 4–26, 43–46 (ES) | [#1–#12](https://github.com/Esaban17/barberflow-microservices/pulls?q=is%3Apr+is%3Amerged) |
-| `docs/a2a-mcp-api-notes` | 3 | [#13](https://github.com/Esaban17/barberflow-microservices/pull/13) ✅ mergeado |
-| `feat/mcp-server` | 28–31 (bloqueaban 33-36 de AM) | [#14](https://github.com/Esaban17/barberflow-microservices/pull/14) ✅ mergeado |
-| `feat/a2a-agents` | 33–36 | [#15](https://github.com/Esaban17/barberflow-microservices/pull/15) ✅ mergeado |
-| `docs/rotacion-credenciales` | 38 | [#16](https://github.com/Esaban17/barberflow-microservices/pull/16) ✅ mergeado |
-| `docs/a2a-vs-mcp` | 39 | [#17](https://github.com/Esaban17/barberflow-microservices/pull/17) ✅ mergeado |
-| `docs/railway-deploy` | 41 | [#18](https://github.com/Esaban17/barberflow-microservices/pull/18) ✅ mergeado |
-| `feat/web-status-panel` | 47 | [#19](https://github.com/Esaban17/barberflow-microservices/pull/19) ✅ mergeado |
-| `docs/entrega` | 42 | [#20](https://github.com/Esaban17/barberflow-microservices/pull/20) ✅ mergeado |
+| [#1](https://github.com/Esaban17/barberflow-microservices/pull/1)–[#7](https://github.com/Esaban17/barberflow-microservices/pull/7) | 4–9, 23 | Compose base, Consul, y los módulos de `shared/`: auth, db, logging, consul, resilience |
+| [#8](https://github.com/Esaban17/barberflow-microservices/pull/8) | — | Fix: truncamiento silencioso de contraseñas en bcrypt |
+| [#9](https://github.com/Esaban17/barberflow-microservices/pull/9) | 10–13 | `users-svc` completo |
+| [#10](https://github.com/Esaban17/barberflow-microservices/pull/10) | 20–22 | `notif-svc` completo |
+| [#11](https://github.com/Esaban17/barberflow-microservices/pull/11) | 14–19, 24, 25 | `booking-svc` + outbox + `/admin/circuit` |
+| [#12](https://github.com/Esaban17/barberflow-microservices/pull/12) | 43–46 | `web-ui` (Next.js) con BFF que descubre por Consul |
+| [#13](https://github.com/Esaban17/barberflow-microservices/pull/13) | 3 | API real de `a2a-sdk==1.1.2` y `mcp==2.0.0` |
+| [#14](https://github.com/Esaban17/barberflow-microservices/pull/14) | 28–31 | `barberflow-mcp` con `MCPServer` streamable-http y sus 5 tools |
+| [#15](https://github.com/Esaban17/barberflow-microservices/pull/15) | 33–36 | Red de agentes A2A |
+| [#16](https://github.com/Esaban17/barberflow-microservices/pull/16) | 38 | Rotación de credenciales sin downtime |
+| [#17](https://github.com/Esaban17/barberflow-microservices/pull/17) | 39 | Sección Agent-to-Agent: MCP vs. A2A |
+| [#18](https://github.com/Esaban17/barberflow-microservices/pull/18) | 41 | Guía de despliegue en Railway |
+| [#19](https://github.com/Esaban17/barberflow-microservices/pull/19) | 47 | Panel de estado `/status` |
+| [#20](https://github.com/Esaban17/barberflow-microservices/pull/20) | 42 | Este documento (primera versión) |
+| [#21](https://github.com/Esaban17/barberflow-microservices/pull/21) | 32, 37, 40 | Entrega final: README con arquitectura, `scripts/demo.sh`, capturas del panel y este corte |
 
 ## 3. Rotación de credenciales — resultado medido (tarea 38, detalle)
 
@@ -58,8 +90,8 @@ contra Postgres real (no simulados):
 
 ## 4. Auditoría de secretos en el historial de git
 
-Ejecutada contra el repo real, las 43 commits de **todas** las ramas locales
-(`git log --all`), no solo `main`:
+Ejecutada contra el repo real, sobre **todas** las ramas (`git log --all`), no solo `main`.
+El barrido con gitleaks es el del 7 de septiembre de 2026, sobre las 43 commits de esa fecha:
 
 ```
 $ gitleaks detect --source . --log-opts="--all" --report-format json \
@@ -70,22 +102,31 @@ $ gitleaks detect --source . --log-opts="--all" --report-format json \
 9:25PM INF no leaks found
 ```
 
-`gitleaks_report.json` resultante: `[]` (lista vacía).
+`gitleaks_report.json` resultante: `[]` (lista vacía, guardado en
+`docs/evidencias/gitleaks-report.json`).
 
-Como segunda pasada, manual y específica a las variables de este proyecto (por si
-el ruleset genérico de gitleaks no cubriera algún patrón propio):
+La segunda pasada —manual y específica a las variables de este proyecto— se volvió a correr
+hoy, ya sobre las 57 commits del historial completo:
 
 ```
 $ git log -p --all -- '*.env' '*.env.*' \
     | grep -E "^\+.*(PASSWORD|SECRET|API_KEY)=" \
     | grep -viE "=cambiar\s*$|=\s*$"
 
++DEMO_USER_PASSWORD=demo1234
 +JWT_SECRET=cambiar-por-un-secreto-largo-y-aleatorio
 ```
 
-La única línea que aparece es el placeholder de `.env.example` (`cambiar-...`),
-nunca un valor real. Y `.env` (el archivo con los secretos reales) nunca se
-agregó al repo:
+Las dos líneas son de `.env.example` y ninguna es un secreto:
+
+- `JWT_SECRET=cambiar-...` es el placeholder que el `.env.example` pide reemplazar.
+- `DEMO_USER_PASSWORD=demo1234` es la contraseña del usuario de demostración, cuyo hash
+  bcrypt ya está versionado —a propósito y desde el primer día— en la semilla
+  `services/users-svc/db/01-init.sql`. No protege nada: existe para que `barberflow-mcp`
+  pueda autenticarse contra `users-svc` en una demo local. Dejarla explícita en
+  `.env.example` evita el `401` que aparecía al seguir el README al pie de la letra.
+
+Y `.env` (el archivo con los secretos reales) nunca se agregó al repo:
 
 ```
 $ git log --all --diff-filter=A --name-only | grep -E "^\.env$|/\.env$"
@@ -94,30 +135,17 @@ $ git log --all --diff-filter=A --name-only | grep -E "^\.env$|/\.env$"
 
 **Conclusión: ningún secreto real llegó al historial de git, en ninguna rama.**
 
-## 5. Lo que falta ejecutar de verdad (para quien retome esto)
+## 5. Lo único que falta ejecutar
 
-1. **Video demo de 5–8 min** (entregable final del PDF): ya existe un clip corto
-   mostrando el MCP desde Claude Desktop (agenda una cita), pero falta el video
-   completo cubriendo el "Video Checkpoint" de la tarea 4 y el checkpoint de la
-   tarea 5:
-   - `docker compose up` → Consul en `localhost:8500` con los servicios en verde
-   - Registrar un usuario → login → mostrar el JWT recibido
-   - Crear una reserva usando el JWT → ver el log JSON con `correlation_id`
-   - Derribar `notif-svc` → hacer reservas → mostrar que el sistema sigue
-     respondiendo → mostrar el circuit breaker abierto (panel `/status` o
-     `GET /admin/circuit`)
-   - Levantar `notif-svc` → circuit breaker se cierra
-   - El clip de MCP que ya existe (Claude Desktop listando y reservando)
-   - Demo de A2A: instrucción en lenguaje natural al `orchestrator` → delega a
-     `booking-agent` + `notification-agent` → logs de la delegación
-2. **Railway (tarea 41, los +15 extra):** la guía y toda la configuración están
-   listas en `docs/railway-deploy.md`, pero el despliegue real no se ejecutó — ni
-   el entorno de nube ni la VM del dispositivo usados para el resto del trabajo
-   tienen salida de red hacia `railway.app`/`railway.com` (bloqueado por política
-   de red, confirmado con `curl`). Hace falta correrlo desde una cuenta de Railway
-   real, siguiendo la guía, y pegar aquí las URLs públicas resultantes + una
-   captura de la UI de Consul en la nube (eso es lo que pide el "Done cuando" de
-   la tarea 41).
-3. **Captura de pantalla del panel `/status`** (tarea 47) en los dos estados (todo
-   verde, y con el breaker abierto) para `docs/evidencias/` — se verificó por API
-   pero no se tomó captura de la UI todavía.
+**Despliegue en Railway (tarea 41, los +12 restantes de los puntos extra).** La guía y la
+configuración están completas en `docs/railway-deploy.md`, pero el despliegue real no se
+ejecutó: ni el entorno donde se escribió la guía ni la máquina de desarrollo tienen salida
+de red hacia `railway.app`/`railway.com` (bloqueado por política de red, confirmado con
+`curl`). Para cerrarlo hace falta, desde una cuenta de Railway real:
+
+1. Seguir la guía y desplegar los servicios.
+2. Pegar en este documento las URLs públicas resultantes.
+3. Adjuntar la captura de la UI de Consul en la nube a `docs/evidencias/`.
+4. Mover los secretos a las Variables del proveedor (eso es lo que vale los +4).
+
+El `docker-compose.yml` local sigue siendo válido para desarrollo, como pide el PDF.
