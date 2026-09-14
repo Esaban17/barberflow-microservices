@@ -159,21 +159,36 @@ las tools del MCP Server; deja el sistema como lo encontró. Ver
 
 ## Demo en video
 
-El repositorio incluye [`video_DEMO_mcp.mp4`](video_DEMO_mcp.mp4) (~65 MB): una llamada real
-a `barberflow-mcp` desde Claude como cliente MCP, que cubre los checkpoints 6 y 7 del
-enunciado (`get_available_slots` y `create_booking` en lenguaje natural).
+**Video final de la entrega (5–8 min):** [ver en Google Drive](https://drive.google.com/file/d/1DouYYafoh0M1oHnn-a7ow-IH00-T6y-o/view?usp=sharing)
+(también en [`VIDEO_FINAL.md`](VIDEO_FINAL.md)). Recorre en vivo, contra el sistema
+levantado con `docker compose up --build`, los 7 checkpoints del enunciado más el demo
+de Agent-to-Agent de la tarea 5: Consul en verde, registro/login/JWT, una reserva con su
+`correlation_id` rastreado en los logs de dos servicios, el circuit breaker abriéndose y
+cerrándose con `notif-svc` caído y recuperado, Claude Desktop listando horarios y creando
+una reserva vía MCP, y una instrucción en lenguaje natural al `orchestrator` delegando por
+A2A en `booking-agent` y `notification-agent`.
+
+El repositorio incluye además [`video_DEMO_mcp.mp4`](video_DEMO_mcp.mp4) (~65 MB): una
+grabación previa, más corta, con una llamada real a `barberflow-mcp` desde Claude como
+cliente MCP (checkpoints 6 y 7: `get_available_slots` y `create_booking` en lenguaje
+natural).
 
 Los 7 checkpoints que pide el enunciado, y con qué se comprueba cada uno:
 
 | # | Checkpoint | Cómo se comprueba |
 |---|---|---|
-| 1 | `docker compose up` → Consul con los servicios en verde | http://localhost:8500 · `docs/evidencias/02-consul-3-servicios.png` |
-| 2 | Registrar usuario → login → JWT | `./scripts/demo.sh` (paso 2) |
-| 3 | Reservar con el JWT → log JSON con `correlation_id` | `./scripts/demo.sh` (paso 3) · `docs/correlation-id-trace.md` |
-| 4 | Derribar `notif-svc` → el sistema responde 201 → breaker abierto | `./scripts/demo.sh` (paso 4) · `docs/evidencias/03-status-breaker-abierto.png` |
-| 5 | Levantar `notif-svc` → el breaker cierra y el outbox se vacía | `./scripts/demo.sh` (paso 5) · `docs/evidencias/04-status-todo-verde.png` |
-| 6 | Claude lista horarios vía MCP | `video_DEMO_mcp.mp4` · `./scripts/demo.sh` (paso 6) |
-| 7 | Claude crea la reserva vía MCP | `video_DEMO_mcp.mp4` · `./scripts/demo.sh` (paso 7) |
+| 1 | `docker compose up` → Consul con los servicios en verde | video final · http://localhost:8500 · `docs/evidencias/02-consul-3-servicios.png` |
+| 2 | Registrar usuario → login → JWT | video final · `./scripts/demo.sh` (paso 2) |
+| 3 | Reservar con el JWT → log JSON con `correlation_id` | video final · `./scripts/demo.sh` (paso 3) · `docs/correlation-id-trace.md` |
+| 4 | Derribar `notif-svc` → el sistema responde 201 → breaker abierto | video final · `./scripts/demo.sh` (paso 4) · `docs/evidencias/03-status-breaker-abierto.png` |
+| 5 | Levantar `notif-svc` → el breaker cierra y el outbox se vacía | video final · `./scripts/demo.sh` (paso 5) · `docs/evidencias/04-status-todo-verde.png` |
+| 6 | Claude lista horarios vía MCP | video final · `video_DEMO_mcp.mp4` · `./scripts/demo.sh` (paso 6) |
+| 7 | Claude crea la reserva vía MCP | video final · `video_DEMO_mcp.mp4` · `./scripts/demo.sh` (paso 7) |
+
+Y el demo de Agent-to-Agent de la tarea 5 (instrucción al `orchestrator`, descubrimiento
+por Agent Card, delegación a `booking-agent` y `notification-agent`, y el mismo
+`correlation_id` rastreado a través de las dos capas) está en el mismo video final, y en
+más detalle en [Agent-to-Agent: MCP vs. A2A](#agent-to-agent-mcp-vs-a2a-tarea-39) más abajo.
 
 Para conectar Claude Desktop al MCP Server, la configuración probada está en
 [`docs/a2a-mcp-api-notes.md`](docs/a2a-mcp-api-notes.md#config-de-claude-desktop-tarea-32).
