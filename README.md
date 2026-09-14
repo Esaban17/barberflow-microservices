@@ -5,8 +5,10 @@ tres servicios independientes con base de datos propia, service registry con Con
 un MCP Server para operar el sistema con agentes de IA, y una red de agentes A2A.
 
 > Proyecto del curso **Arquitectura de Componentes y Microservicios** — Universidad Galileo, FISICC.
-> El backlog de implementación está en [`docs/BACKLOG.md`](docs/BACKLOG.md) y el checklist
-> de la entrega con sus evidencias en [`ENTREGA.md`](ENTREGA.md).
+> El backlog de implementación está en [`docs/BACKLOG.md`](docs/BACKLOG.md), el checklist
+> de la entrega con sus evidencias en [`ENTREGA.md`](ENTREGA.md), y la verificación de cada
+> criterio de la rúbrica del curso contra el código real en
+> [`AUDITORIA_RUBRICA.md`](AUDITORIA_RUBRICA.md).
 
 ## Arquitectura
 
