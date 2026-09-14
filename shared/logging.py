@@ -13,7 +13,7 @@ import uuid
 from collections.abc import Callable
 
 import structlog
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.datastructures import MutableHeaders
 from starlette.requests import Request
 
 CORRELATION_ID_HEADER = "x-correlation-id"
@@ -57,8 +57,21 @@ def correlation_headers() -> dict[str, str]:
     return {CORRELATION_ID_HEADER: correlation_id} if correlation_id else {}
 
 
-class CorrelationIdMiddleware(BaseHTTPMiddleware):
-    """Genera o propaga el `x-correlation-id` y registra una línea por request."""
+class CorrelationIdMiddleware:
+    """Genera o propaga el `x-correlation-id` y registra una línea por request.
+
+    Implementado como middleware ASGI puro (NO como `starlette.middleware.base.
+    BaseHTTPMiddleware`). `BaseHTTPMiddleware.dispatch()` corre la app interior
+    en una tarea aparte y hace un relay del body del request y de la respuesta
+    a través de streams internos; con requests que traen body (típicamente
+    POST/PUT con JSON) ese relay puede colgarse o fallar sin que la excepción
+    llegue nunca al `try/except` de `dispatch()` — el cliente igual recibe su
+    respuesta (el body viaja por otro canal) pero la línea de log del request,
+    tanto la de éxito como la de error, nunca se emite. Un GET sin body no
+    dispara ese camino porque no hay body que relay-ear.
+    Interceptando `send` directamente evitamos esa capa de relay: no se abre
+    ninguna tarea nueva y `receive` llega sin tocar a la app interior.
+    """
 
     def __init__(
         self,
@@ -66,10 +79,15 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
         *,
         extract_user_id: Callable[[Request], str | None] | None = None,
     ) -> None:
-        super().__init__(app)
+        self.app = app
         self._extract_user_id = extract_user_id
 
-    async def dispatch(self, request: Request, call_next):
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope, receive=receive)
         correlation_id = request.headers.get(CORRELATION_ID_HEADER) or str(uuid.uuid4())
         structlog.contextvars.bind_contextvars(correlation_id=correlation_id)
 
@@ -89,8 +107,18 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
 
         log = get_logger().bind(method=request.method, path=request.url.path)
         started = time.perf_counter()
+        status_code = 500
+
+        async def send_wrapper(message):
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = message["status"]
+                headers = MutableHeaders(scope=message)
+                headers.append(CORRELATION_ID_HEADER, correlation_id)
+            await send(message)
+
         try:
-            response = await call_next(request)
+            await self.app(scope, receive, send_wrapper)
         except Exception as exc:
             # Un request que revienta sin dejar rastro es peor que uno lento: se
             # deja la línea y se re-lanza. El middleware observa, no traga; el
@@ -103,13 +131,11 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
             )
             raise
         else:
-            response.headers[CORRELATION_ID_HEADER] = correlation_id
             log.info(
                 "http_request",
-                status_code=response.status_code,
+                status_code=status_code,
                 duration_ms=round((time.perf_counter() - started) * 1000, 2),
             )
-            return response
         finally:
             # Corre en los dos caminos: el contexto nunca se filtra al siguiente request.
             structlog.contextvars.clear_contextvars()
@@ -140,7 +166,11 @@ if __name__ == "__main__":
     def boom() -> dict[str, str]:
         raise RuntimeError("kaboom")
 
-    async def drive_requests() -> tuple[httpx.Response, httpx.Response, str]:
+    @app.post("/echo")
+    def echo(payload: dict) -> dict:
+        return payload
+
+    async def drive_requests() -> tuple[httpx.Response, httpx.Response, httpx.Response, str]:
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             first = await client.get(
@@ -158,17 +188,25 @@ if __name__ == "__main__":
             # El request sano va después del que revienta: si el camino de error no
             # limpiara el contexto, este heredaría el user_id "u-99".
             second = await client.get("/ping")
-            return first, second, raised
+            # Un POST con body JSON: es el caso que fallaba en vivo con
+            # BaseHTTPMiddleware (ver docstring de la clase) y que este
+            # self-check no alcanzaba a cubrir antes de este cambio.
+            third = await client.post(
+                "/echo",
+                json={"slot_id": 7},
+                headers={CORRELATION_ID_HEADER: "post-1", "x-test-user": "u-7"},
+            )
+            return first, second, third, raised
 
     buffer = io.StringIO()
     with contextlib.redirect_stdout(buffer):
         # Los requests corren en la misma tarea a propósito: TestClient lanza cada
         # uno en su propia tarea y ahí una fuga de contexto sería indetectable.
-        first, second, raised = asyncio.run(drive_requests())
+        first, second, third, raised = asyncio.run(drive_requests())
 
     raw_lines = buffer.getvalue().splitlines()
-    assert len(raw_lines) == 3, raw_lines
-    first_line, error_line, second_line = (json.loads(line) for line in raw_lines)
+    assert len(raw_lines) == 4, raw_lines
+    first_line, error_line, second_line, post_line = (json.loads(line) for line in raw_lines)
 
     # Un correlation id entrante se respeta y vuelve en la respuesta.
     assert first.headers[CORRELATION_ID_HEADER] == "abc-123"
@@ -208,8 +246,19 @@ if __name__ == "__main__":
     assert structlog.contextvars.get_contextvars() == {}
     assert correlation_headers() == {}
 
+    # POST con body JSON: mismo comportamiento que un GET, con el body intacto.
+    assert third.status_code == 200
+    assert third.json() == {"slot_id": 7}
+    assert third.headers[CORRELATION_ID_HEADER] == "post-1"
+    assert post_line["correlation_id"] == "post-1"
+    assert post_line["method"] == "POST"
+    assert post_line["path"] == "/echo"
+    assert post_line["status_code"] == 200
+    assert post_line["user_id"] == "u-7"
+
     print(buffer.getvalue(), end="")
     print(
         "self-check OK: JSON válido, correlation_id propagado y generado, user_id presente,"
-        " request fallido logueado con level=error y re-lanzado, sin fugas de contexto"
+        " request fallido logueado con level=error y re-lanzado, POST con body logueado,"
+        " sin fugas de contexto"
     )

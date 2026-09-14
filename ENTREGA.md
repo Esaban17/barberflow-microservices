@@ -34,7 +34,7 @@ Sobre el sistema levantado con `docker compose up --build` (12 contenedores):
 |---|---|
 | `./scripts/demo.sh` — los 7 checkpoints del PDF de corrido | ✅ pasa y deja el sistema como lo encontró |
 | `users-svc`, `booking-svc`, `notif-svc` y `barberflow-mcp` en verde en Consul | ✅ |
-| Registro → login → JWT → reserva con el mismo `correlation_id` en booking-svc y notif-svc | ✅ |
+| Registro → login → JWT → reserva con el mismo `correlation_id` en booking-svc y notif-svc | ✅ (ver nota del 14 de septiembre más abajo: esta fila no fue representativa) |
 | 3 reservas con `notif-svc` detenido → 201 y `notification: pending` | ✅ breaker `open`, `fail_counter: 3`, `outbox_pending: 3` |
 | `notif-svc` de vuelta → breaker `closed` y outbox vaciado sin intervención | ✅ las notificaciones encoladas llegaron a notif-svc |
 | MCP por protocolo: `tools/list` (5 tools) → `get_available_slots` → `create_booking` → cita confirmada en `booking-db` → `cancel_booking` | ✅ |
@@ -52,6 +52,46 @@ hubo que apuntar `command` a la ruta absoluta `C:\Program Files\nodejs\npx.cmd`)
   arriba en ese momento).
 - `get_notifications(user_id=1)` → la notificación de esa cita aparece en el historial.
 - `docker compose ps` → los 12 contenedores `Up`, las 3 bases `(healthy)`.
+
+### Bug real encontrado y corregido — 14 de septiembre de 2026
+
+Al grabar el video de la sección 3 (logging estructurado con `correlation_id`), las
+peticiones `POST` con body JSON (crear una reserva) dejaron de aparecer en
+`docker compose logs`, mientras que las `GET` seguían logueando con normalidad. Se reprodujo
+de forma consistente en PowerShell, en WSL y en llamadas internas (`docker exec`), y
+sobrevivió a un reinicio completo de la máquina — descartando red, Docker Desktop y el propio
+`docker logs`/`docker compose logs` como causa (se comprobó también en el visor de logs de la
+UI de Docker Desktop).
+
+**Causa raíz:** `CorrelationIdMiddleware` (`shared/logging.py`) heredaba de
+`starlette.middleware.base.BaseHTTPMiddleware`, que ejecuta la app interior en una tarea
+aparte y hace un *relay* del body del request y de la respuesta a través de streams internos
+de `anyio`. Con requests que traen body ese relay puede fallar sin que la excepción llegue
+nunca al `try/except` del middleware: el cliente igual recibe su respuesta (el body viaja por
+otro canal), pero ni la línea de éxito ni la de error se emiten. Un `GET` sin body nunca
+dispara ese camino, de ahí la asimetría observada. El self-check embebido en
+`shared/logging.py` (`python -m shared.logging`) no lo detectaba porque corre en proceso,
+sobre `httpx.ASGITransport`, que entrega el body en un solo paso — no reproduce el streaming
+real de `uvicorn` sobre un socket TCP.
+
+**Fix:** se reescribió `CorrelationIdMiddleware` como middleware ASGI puro (interceptando
+`send` directamente) en vez de heredar de `BaseHTTPMiddleware`, eliminando esa capa de
+*relay*. Misma firma pública (`app.add_middleware(CorrelationIdMiddleware,
+extract_user_id=...)`), mismo comportamiento observable — ningún `main.py` de servicio
+cambió. El self-check se amplió con un caso `POST` con body para cubrir este escenario.
+
+**Re-verificación en vivo tras el fix** (`docker compose up -d --build`, los 7 servicios
+Python reconstruidos con el `shared/` corregido):
+
+| Comprobación | Resultado |
+|---|---|
+| `POST /appointments` en booking-svc | ✅ `status_code: 201`, `correlation_id: 5fc47027-a92e-413f-b3ac-5fb313100f67`, `user_id: "1"` |
+| `POST /notifications` en notif-svc, mismo request | ✅ mismo `correlation_id` en `notification_sent` y en `http_request` |
+
+La fila "Registro → login → JWT → reserva con el mismo `correlation_id`" de la tabla del 11
+de septiembre no probó específicamente un `POST` con body contra `docker compose logs` con
+este bug ya presente en el código, así que no era representativa. Con el fix aplicado, la
+afirmación se sostiene end-to-end y así quedó grabada en el video final.
 
 ## 2. Estado de las ramas y PRs (tarea 42 lo pide explícitamente)
 
